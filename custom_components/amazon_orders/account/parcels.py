@@ -270,6 +270,8 @@ def build_history(
             "status": map_event_status(message),
             "raw_status": message,
         }
+        if event.get("location"):
+            entry["location"] = event["location"]
         parsed = parse_iso(timestamp)
         if parsed is None:
             unparseable.append(entry)
