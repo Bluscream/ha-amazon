@@ -92,6 +92,7 @@ _EVENT_MAP: dict[str, ParcelStatus] = {
 _CARRIER_NAMES = {
     "DRAGONFLY": "Dragonfly",
     "DHL_CONNECT": "DHL",
+    "DPDDE": "DPD",
     "Amazon": "Amazon",
     "COLIS_PRIVE_BELU": "Colis Privé",
     # Not an Amazon code: guessed from the tracking id (pages._guess_carrier).

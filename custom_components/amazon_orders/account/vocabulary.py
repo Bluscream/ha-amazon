@@ -171,4 +171,11 @@ MONTHS: dict[str, int] = {**_PLAUSIBLE_MONTHS, **_CONFIRMED_MONTHS}
 
 
 # Delivery-card headers that name no courier, seen on real pages.
-UNNAMED_CARRIER_HEADERS = {"informations sur la livraison", "delivery info"}
+UNNAMED_CARRIER_HEADERS = {
+    "informations sur la livraison",
+    "delivery info",
+    "delivery by amazon",
+    "livraison par amazon",
+    "lieferung durch amazon",
+    "bezorging door amazon",
+}
