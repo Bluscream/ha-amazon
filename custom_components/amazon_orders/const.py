@@ -30,6 +30,7 @@ class ParcelStatus(StrEnum):
 PLATFORMS = [
     Platform.BUTTON,
     Platform.CALENDAR,
+    Platform.DEVICE_TRACKER,
     Platform.GEO_LOCATION,
     Platform.SENSOR,
 ]
