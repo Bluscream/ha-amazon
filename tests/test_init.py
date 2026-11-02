@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 import aiohttp
 import pytest
 from homeassistant.config_entries import ConfigEntryState
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -52,6 +53,13 @@ async def test_setup_and_unload(hass):
     incoming = hass.states.get("sensor.amazon_amazon_nl_incoming_parcels")
     assert incoming is not None
     assert incoming.state == "1"
+
+    dev_reg = dr.async_get(hass)
+    device = dev_reg.async_get_device_by_identifier(
+        (DOMAIN, entry.entry_id), entry.entry_id
+    )
+    assert device is not None
+    assert device.configuration_url == "https://www.amazon.nl/-/en/gp/css/order-history"
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
