@@ -68,7 +68,7 @@ def test_parcel_sensor_status_and_attributes():
     assert sensor.entity_picture == "https://m.media-amazon.com/images/I/sample.jpg"
     assert sensor.extra_state_attributes["barcode"] == "A"
     assert sensor.translation_placeholders == {
-        "barcode": 'A ("First Item That Is Quite Long An…", "Second Item")'
+        "barcode": 'with "First Item That Is Quite Long An…", "Second Item"'
     }
 
 
@@ -106,7 +106,7 @@ def test_parcel_sensor_single_item_truncation():
     )
     sensor = AmazonParcelSensor(_coordinator([parcel]), _entry(), "A")
     assert sensor.translation_placeholders == {
-        "barcode": f'A ("{title_80}")'
+        "barcode": f'with "{title_80}"'
     }
 
     # 140 chars - should be truncated to 128 chars + ellipsis
@@ -118,7 +118,7 @@ def test_parcel_sensor_single_item_truncation():
     sensor_long = AmazonParcelSensor(_coordinator([parcel_long]), _entry(), "B")
     expected_title = ("A" * 128) + "…"
     assert sensor_long.translation_placeholders == {
-        "barcode": f'B ("{expected_title}")'
+        "barcode": f'with "{expected_title}"'
     }
 
 

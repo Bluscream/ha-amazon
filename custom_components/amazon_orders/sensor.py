@@ -263,7 +263,7 @@ class AmazonParcelSensor(CoordinatorEntity[AmazonCoordinator], SensorEntity):
                     clean = clean[:max_len].rstrip() + "…"
                 shortened.append(f'"{clean}"')
             new_placeholders = {
-                "barcode": f"{self._barcode} ({', '.join(shortened)})"
+                "barcode": f"with {', '.join(shortened)}"
             }
         else:
             new_placeholders = {"barcode": self._barcode}
