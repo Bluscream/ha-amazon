@@ -106,3 +106,23 @@ async def test_get_events_filters_by_range():
     end = datetime(2100, 1, 1, tzinfo=timezone.utc)
     events = await cal.async_get_events(MagicMock(), start, end)
     assert {e.uid for e in events} == {"FUTURE"}
+
+
+def test_all_day_event_when_midnight():
+    from datetime import date
+    cal = _cal(
+        [
+            {
+                "barcode": "ALLDAY",
+                "planned_from": "2099-01-01T00:00:00Z",
+                "planned_to": "2099-01-01T23:59:59Z",
+                "raw": {"items": ["Item A", "Item B"]},
+            }
+        ]
+    )
+    events = cal._events()
+    assert len(events) == 1
+    assert events[0].start == date(2099, 1, 1)
+    assert events[0].end == date(2099, 1, 2)
+    assert events[0].all_day is True
+    assert events[0].summary == '📦 Amazon: "Item A", "Item B"'

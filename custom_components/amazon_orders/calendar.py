@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
-from homeassistant.components.calendar import CalendarEntity, CalendarEvent
+from homeassistant.components.calendar import CalendarEvent, CalendarEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -19,6 +19,50 @@ from .device import ATTRIBUTION, build_device_info
 PARALLEL_UPDATES = 0
 
 _DEFAULT_EVENT_DURATION = timedelta(hours=1)
+
+
+def _event_summary(parcel: dict) -> str:
+    raw = parcel.get("raw") or {}
+    items = raw.get("items")
+    if items and isinstance(items, list):
+        max_len = 64 if len(items) == 1 else 32
+        shortened = []
+        for item in items:
+            clean = str(item.get("title") if isinstance(item, dict) else item).strip()
+            if len(clean) > max_len:
+                clean = clean[:max_len].rstrip() + "…"
+            shortened.append(f'"{clean}"')
+        return f"📦 Amazon: {', '.join(shortened)}"
+    sender = parcel.get("sender")
+    barcode = parcel.get("barcode") or ""
+    return sender or (f"📦 Amazon: Parcel {barcode}" if barcode else "📦 Amazon delivery")
+
+
+def _event_bounds(
+    start: datetime, end: datetime | None
+) -> tuple[date | datetime, date | datetime]:
+    # Check if this represents an all-day delivery (no specific hour window)
+    # A whole-day date is stored with time.min (00:00:00) either in its native zone or local time
+    is_midnight = start.time() == time.min or dt_util.as_local(start).time() == time.min
+    if is_midnight and (
+        end is None
+        or end.time() in (time.min, time(23, 59, 59))
+        or dt_util.as_local(end).time() in (time.min, time(23, 59, 59))
+        or end.date() > start.date()
+        or end <= start
+    ):
+        start_date = start.date()
+        if end is None or end.date() <= start_date:
+            end_date = start_date + timedelta(days=1)
+        elif end.time() == time.min:
+            end_date = end.date()
+        else:
+            end_date = end.date() + timedelta(days=1)
+        return start_date, end_date
+
+    if end is None or end <= start:
+        end = start + _DEFAULT_EVENT_DURATION
+    return start, end
 
 
 async def async_setup_entry(
@@ -57,12 +101,10 @@ class AmazonDeliveriesCalendar(CoordinatorEntity[AmazonCoordinator], CalendarEnt
             if start is None:
                 continue
             end = parse_iso(parcel.get("planned_to"))
-            if end is None or end <= start:
-                end = start + _DEFAULT_EVENT_DURATION
+            event_start, event_end = _event_bounds(start, end)
 
             barcode = parcel.get("barcode") or ""
-            sender = parcel.get("sender")
-            summary = sender or (f"Parcel {barcode}" if barcode else "Amazon parcel")
+            summary = _event_summary(parcel)
             description_parts = [
                 f"Barcode: {barcode}" if barcode else None,
                 f"Status: {parcel.get('status')}" if parcel.get("status") else None,
@@ -73,8 +115,8 @@ class AmazonDeliveriesCalendar(CoordinatorEntity[AmazonCoordinator], CalendarEnt
 
             events.append(
                 CalendarEvent(
-                    start=start,
-                    end=end,
+                    start=event_start,
+                    end=event_end,
                     summary=summary,
                     description=description or None,
                     location=location,
@@ -87,8 +129,12 @@ class AmazonDeliveriesCalendar(CoordinatorEntity[AmazonCoordinator], CalendarEnt
     def event(self) -> CalendarEvent | None:
         """Return the next upcoming calendar event."""
         now = dt_util.now()
-        upcoming = [event for event in self._events() if event.end > now]
-        return min(upcoming, key=lambda event: event.start) if upcoming else None
+        upcoming = [event for event in self._events() if event.end_datetime_local > now]
+        return (
+            min(upcoming, key=lambda event: event.start_datetime_local)
+            if upcoming
+            else None
+        )
 
     async def async_get_events(
         self,
@@ -100,5 +146,6 @@ class AmazonDeliveriesCalendar(CoordinatorEntity[AmazonCoordinator], CalendarEnt
         return [
             event
             for event in self._events()
-            if event.start < end_date and event.end > start_date
+            if event.start_datetime_local < end_date
+            and event.end_datetime_local > start_date
         ]
