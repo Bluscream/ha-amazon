@@ -16,6 +16,15 @@ A custom Home Assistant integration that tracks your [Amazon](https://www.amazon
 
 Built on the [ha-parcel-integrations](https://ha-parcel-integrations.github.io/) format: it publishes the same canonical parcel format, statuses and events as the other carrier integrations, so it plugs straight into the [Parcel Aggregator](https://github.com/ha-parcel-integrations/ha-parcel-aggregator) and cross-carrier automations.
 
+> [!NOTE]
+> **This is the `Bluscream/ha-amazon` fork** (branch `live-tracking`). On top of upstream it adds:
+>
+> - **What is inside**: every parcel lists its items with Amazon's product image (`items`), and its sensor is named after them; the first image is the sensor's picture.
+> - **Delivery dates from every "Arriving …" line** amazon.de shows in English: weekdays (`Arriving Wednesday`), day-first dates (`Arriving 20 November - 18 December`) and time ranges (`Arriving today 6 pm – 10 pm`). Whole-day promises are all-day events in the calendar.
+> - **Live courier map**: while Amazon's own courier has a parcel out for delivery, the integration reads where the courier is and how many stops are left, as Amazon's tracking page does (about once a minute while shown). The parcel gets a `live` block, `sensor.<account>_courier_stops_away` counts down, and `amazon_orders_parcel_live_updated` fires (also a device trigger) when a session starts or ends and on every stop. Turn it off under **Configure → Live courier map**. Map entities come from the forked Parcel Aggregator.
+>
+> The shapes are the shared `parcel-items/1` and `parcel-live/1` extensions, so other carriers and the aggregator can use them unchanged.
+
 ## Contents
 
 - [Features](#features)

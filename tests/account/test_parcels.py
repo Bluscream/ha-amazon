@@ -14,6 +14,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.amazon_orders.account.parcels import (
     apply_delivered_filter,
     build_history,
+    items_label,
     map_event_status,
     normalize_parcel,
     parse_iso,
@@ -384,6 +385,7 @@ CANONICAL_KEYS = [
     "weight",
     "dimensions",
     "history",
+    "items",  # parcel-items/1
     "live",  # parcel-live/1
     "raw",
 ]
@@ -543,6 +545,8 @@ def test_carrier_names(caplog):
     assert "DHL_CONNECT" not in caplog.text
     raw["carrier_code"] = "COLIS_PRIVE_BELU"
     assert normalize_parcel(raw)["carrier"] == "Colis Privé"
+    raw["carrier_code"] = "DPDDE"  # amazon.de
+    assert normalize_parcel(raw)["carrier"] == "DPD"
     raw["carrier_code"] = "Amazon"
     assert normalize_parcel(raw)["carrier"] == "Amazon"
     assert "carrier_code=" not in caplog.text
@@ -566,10 +570,11 @@ def test_unread_carrier_header_is_reported_once(caplog):
     assert "issues/new" in caplog.text
 
 
-def test_generic_carrier_header_is_not_reported_as_unreadable(caplog):
+@pytest.mark.parametrize("header", ["Delivery info", "Delivery by Amazon"])
+def test_generic_carrier_header_is_not_reported_as_unreadable(caplog, header):
     raw = active_record()
     raw["carrier_code"] = None
-    raw["carrier_header"] = "Delivery info"
+    raw["carrier_header"] = header
     assert normalize_parcel(raw)["carrier"] == "Amazon"
     assert "could not read" not in caplog.text
 
@@ -601,9 +606,44 @@ def test_raw_status_falls_back_to_the_order_line_then_the_milestone():
     assert normalize_parcel(raw)["raw_status"] == "DELIVERED"
 
 
-def test_normalize_keeps_the_full_raw_record():
+def test_normalize_keeps_the_raw_record_but_publishes_the_items_once():
     raw = active_record()
-    assert normalize_parcel(raw)["raw"] is raw
+    parcel = normalize_parcel(raw)
+    assert parcel["items"] == raw["items"]
+    assert parcel["raw"] == {k: v for k, v in raw.items() if k != "items"}
+    assert "items" in raw  # the client's cached record is left untouched
+
+
+def test_a_record_without_items_publishes_none():
+    raw = active_record()
+    raw["items"] = []
+    assert normalize_parcel(raw)["items"] is None
+
+
+@pytest.mark.parametrize(
+    "items,width,label",
+    [
+        (None, 64, None),
+        ([], 64, None),
+        ([{"title": "  "}, {"image_url": "x"}, "not a dict"], 64, None),
+        ([{"title": "Widget"}], 64, "Widget"),
+        ([{"title": "A" * 70}], 64, "A" * 63 + "…"),
+        ([{"title": "One"}, {"title": "Two"}], 64, "One, Two"),
+        ([{"title": "A" * 40}, {"title": "B"}], 64, "A" * 31 + "…, B"),
+        (
+            [{"title": t} for t in ("a", "b", "c", "d", "e")],
+            64,
+            "a, b, c, +2",
+        ),
+        (
+            [{"title": "A" * 30}] * 3,
+            12,
+            "A" * 11 + "…, " + "A" * 11 + "…, " + "A" * 11 + "…",
+        ),
+    ],
+)
+def test_items_label(items, width, label):
+    assert items_label(items, width=width) == label
 
 
 def test_tracking_url_accepts_absolute_and_missing_paths():

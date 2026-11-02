@@ -80,10 +80,12 @@ _POD_IMG_RE = re.compile(r"<img\b[^>]*>", re.S)
 _POD_SIGNED_AT = "X-Amz-Date"
 _POD_VALID_FOR = "X-Amz-Expires"
 _POD_SRC_RE = re.compile(r'\b(data-src|src)="([^"]+)"')
-_ITEM_IMAGE_RE = re.compile(
-    r'<img\b[^>]*\b(?:src|data-src)="([^"]*media-amazon\.com/images/I/[^"]+)"[^>]*>',
-    re.I,
-)
+# The product thumbnail beside each order line; the tracking page also shows
+# recommendations, so the order line is the only place an image is known to be
+# this item's.
+_TILE_IMAGE_RE = re.compile(r'class="product-image[^"]*">\s*(<img\b[^>]*>)', re.S)
+_IMAGE_SRC_RE = re.compile(r'\b(data-a-hires|src)="(https://[^"]+)"')
+_TILE_SPAN = 4000  # characters; a real order line is about half that
 
 # "14:00 - 16:30" in the promise message, with the countdown to its end.
 _WINDOW_RE = re.compile(
@@ -156,6 +158,7 @@ class OrderTile:
     position: int = 0
     # False for a line whose link leads to no tracking (a Business order page).
     follow: bool = True
+    image_url: str | None = None
 
     @property
     def shipment_key(self) -> str:
@@ -192,8 +195,6 @@ class TrackInfo:
     state: dict[str, Any] = field(default_factory=dict)
     delivery_photo_url: str | None = None
     delivery_photo_expires: str | None = None
-    item_image_url: str | None = None
-    item_image_urls: list[str] = field(default_factory=list)
 
 
 def looks_signed_out(page: str) -> bool:
@@ -228,11 +229,28 @@ def _day_month(text: str, reference: date, *, forward: bool = False) -> date | N
     return found
 
 
+def _tile_image(fragment: str) -> str | None:
+    """Return the product thumbnail of one order line, the larger one if offered."""
+    tag = _TILE_IMAGE_RE.search(fragment)
+    if tag is None:
+        return None
+    sources = dict(_IMAGE_SRC_RE.findall(tag.group(1)))
+    url = sources.get("data-a-hires") or sources.get("src")
+    return html.unescape(url) if url else None
+
+
 def parse_order_tiles(page: str, today: date) -> list[OrderTile]:
     """Return every order line found on an orders page, in page order."""
     matches = list(_TILE_RE.finditer(page))
     tiles: list[OrderTile] = []
     for position, match in enumerate(matches):
+        # A line's image sits right after its link, before the next line; the
+        # last line gets a tile's worth of page, never the rest of it.
+        tile_end = (
+            matches[position + 1].start()
+            if position + 1 < len(matches)
+            else match.end() + _TILE_SPAN
+        )
         href = html.unescape(match.group(1))
         label = html.unescape(match.group(2))
         query = {k.lower(): v for k, v in parse_qs(urlparse(href).query).items()}
@@ -283,6 +301,7 @@ def parse_order_tiles(page: str, today: date) -> list[OrderTile]:
                 placed_on=placed_on,
                 delivered_on=delivered_on,
                 position=position,
+                image_url=_tile_image(page[match.end() : tile_end]),
             )
         )
     return tiles
@@ -677,18 +696,6 @@ def parse_track_page(page: str, today: date) -> TrackInfo:
     if not isinstance(page_zone, str):
         page_zone = None
     photo = parse_delivery_photo(page)
-    item_images = [
-        html.unescape(m.group(1).strip())
-        for m in _ITEM_IMAGE_RE.finditer(page)
-    ]
-    # Deduplicate while preserving order
-    seen_urls: set[str] = set()
-    unique_item_images: list[str] = []
-    for u in item_images:
-        if u not in seen_urls:
-            seen_urls.add(u)
-            unique_item_images.append(u)
-    item_image = unique_item_images[0] if unique_item_images else None
     return TrackInfo(
         tracking_id=str(tracking_id) if tracking_id else None,
         carrier_code=_CARRIER_ALIASES.get(carrier.group(1), carrier.group(1))
@@ -700,8 +707,6 @@ def parse_track_page(page: str, today: date) -> TrackInfo:
         state=state,
         delivery_photo_url=photo,
         delivery_photo_expires=delivery_photo_expiry(photo),
-        item_image_url=item_image,
-        item_image_urls=unique_item_images,
     )
 
 
@@ -799,20 +804,7 @@ def build_record(
         "milestone": progress.get("lastReachedMilestone") if progress else None,
         "delivery_window": list(window) if window else None,
         "events": track.events if track else [],
-        "items": [tile.title for tile in tiles],
-        "image_url": track.item_image_url if track else None,
-        "image_urls": track.item_image_urls if track else [],
-        "order_items": [
-            {
-                "title": tile.title,
-                "image_url": (
-                    track.item_image_urls[i]
-                    if track and i < len(track.item_image_urls)
-                    else (track.item_image_url if track and i == 0 else None)
-                ),
-            }
-            for i, tile in enumerate(tiles)
-        ],
+        "items": [{"title": tile.title, "image_url": tile.image_url} for tile in tiles],
         "pop_path": lead.pop_path,
         "track_path": track_path,
         "page_state": track.state if track else {},

@@ -174,8 +174,6 @@ MONTHS: dict[str, int] = {**_PLAUSIBLE_MONTHS, **_CONFIRMED_MONTHS}
 UNNAMED_CARRIER_HEADERS = {
     "informations sur la livraison",
     "delivery info",
+    # amazon.de in English, for Amazon's own fleet
     "delivery by amazon",
-    "livraison par amazon",
-    "lieferung durch amazon",
-    "bezorging door amazon",
 }

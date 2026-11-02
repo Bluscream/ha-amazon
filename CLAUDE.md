@@ -123,7 +123,8 @@ the structured state a response carries over anything meant for display.
   00:00 to 23:59:59; a time range gives that range; both in the page's zone,
   else the HA zone `read_at` carries. The tracking page's window wins when
   both exist. An `Arriving …` line in no known shape warns once. No other
-  language until a real line shows its wording. No structured date exists to prefer: an in-flight tracking page's
+  language until a real line shows its wording. No structured date exists to
+  prefer: an in-flight tracking page's
   `promise.promiseMessage` carries the same text as the order line
   ("Arriving tomorrow", seen 2026-10-25), `secondaryPromiseIdentifier` is `NONE`.
 - **Delivered day** from the order line's date, else from a relative word
@@ -267,9 +268,48 @@ which exposes more (delivery window, pickup point, full history).
   carrier entry still owes the same credit. Watch alexapy releases for
   protocol fixes.
 
+## Fork additions (Bluscream/ha-amazon, branch `live-tracking`)
+
+Not upstream. The shared shapes are specified in `PARCEL_EXTENSIONS.md` beside
+the fork in the owner's workspace (`forks/PARCEL_EXTENSIONS.md`); keep the two
+in step.
+
+- **`items` (parcel-items/1)**: `[{title, image_url}]`, one per order line of
+  the shipment, beside the canonical keys. The image is the thumbnail the
+  **orders page** shows beside that line (`data-a-hires`, else `src`, https
+  only), never one from the tracking page: that page also carries
+  recommendations, so its images cannot be told apart from the item's.
+  `normalize_parcel` lifts `items` out of `raw` (a second documented exception
+  to "`raw` is never trimmed") so each title is published once.
+  `items_label()` in `parcels.py` is the one place that shortens them.
+- **Parcel sensor name**: the translated "Parcel <barcode>" until the entity is
+  added, then `_attr_name = items_label(items)`. Never earlier: the entity id is
+  made from the first name and must stay the barcode's. `_attr_name` is the
+  supported switch (its setter clears the cached `name`); a translation-key
+  switch would need two HA-internal caches cleared by hand. A poll without
+  items keeps the last name. `entity_picture` is the first item's image.
+- **`live` (parcel-live/1)**: `account/live.py` (pure: CSRF token from
+  `window.csrfToken`, request form, answer -> `LiveReading`), the client's
+  `async_read_live` (same-origin POST to the page's location endpoint, a
+  refused token renewed once from a fresh tracking page), `live_tracker.py`
+  (own timer: 60 s while a courier is shown, 300 s probing while out for
+  delivery, exponential back-off to 30 min; updates the parcel dicts in place
+  and calls `async_update_listeners`, so it never resets the full poll's
+  timer; a session ending asks for one full poll). Option `live_tracking`, on by
+  default. Event `amazon_orders_parcel_live_updated` (+ device trigger) on a
+  session start/end, state or stop-count change, never on a position-only
+  change. `sensor.<hub>_courier_stops_away`. No map entities here: the
+  aggregator owns them, so a parcel is never on the map twice. `live` stays in
+  `PENDING_CAPABILITIES` until a real courier session has been read.
+- **Calendar**: summary from `items_label`; a window of whole days (00:00 to
+  23:59:59 or the next midnight, in its own offset) is an all-day event.
+- **`DPDDE`** -> DPD and the header "Delivery by Amazon" were seen on amazon.de
+  in English.
+
 ## Options and reloads
 
-One sectioned options form (delivered retention, history, hand-off). The flow is an
+One sectioned options form (delivered retention, history, hand-off, live
+courier map). The flow is an
 `OptionsFlowWithReload` and registers **no** update listener (the two may not be
 combined). Don't call `async_schedule_reload` from the submit instead: that
 reload starts before the new options are saved, so anything built from

@@ -72,12 +72,13 @@ async def test_diagnostics_redacts_the_parcel_and_its_record(hass):
     parcel = result["incoming"][0]
     assert parcel["barcode"] == REDACTED
     assert parcel["url"] == REDACTED
+    # what was ordered, titles and product images alike
+    assert parcel["items"] == REDACTED
     raw = parcel["raw"]
     for key in (
         "tracking_id",
         "order_id",
         "shipment_id",
-        "items",
         "pop_path",
         "track_path",
         "page_state",

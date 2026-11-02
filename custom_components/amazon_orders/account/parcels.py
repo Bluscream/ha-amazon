@@ -361,6 +361,30 @@ def _raw_status(raw: dict) -> str | None:
     return raw.get("order_status") or raw.get("milestone")
 
 
+ITEMS_LABEL_MAX = 3
+
+
+def items_label(items: list[dict] | None, *, width: int = 64) -> str | None:
+    """Return a short human label for a parcel's items, ``None`` without any.
+
+    One item keeps up to ``width`` characters; several share them, and past
+    ``ITEMS_LABEL_MAX`` the rest are counted instead of named.
+    """
+    titles = [
+        str(item["title"]).strip()
+        for item in items or []
+        if isinstance(item, dict) and str(item.get("title") or "").strip()
+    ]
+    if not titles:
+        return None
+    shown = titles[:ITEMS_LABEL_MAX]
+    each = max(width // len(shown), 12)
+    parts = [t if len(t) <= each else t[: each - 1].rstrip() + "…" for t in shown]
+    if len(titles) > len(shown):
+        parts.append(f"+{len(titles) - len(shown)}")
+    return ", ".join(parts)
+
+
 def normalize_parcel(raw: dict, *, include_history: bool = False) -> dict:
     """Return a carrier-agnostic parcel dict with the shipment record as ``raw``.
 
@@ -374,6 +398,10 @@ def normalize_parcel(raw: dict, *, include_history: bool = False) -> dict:
     delivered = status is ParcelStatus.DELIVERED
     window = raw.get("delivery_window")
     planned_from, planned_to = window if window and not delivered else (None, None)
+    # parcel-items/1 publishes the items beside the canonical keys; keeping
+    # them in ``raw`` too would list every title twice on every parcel.
+    items = raw.get("items") or None
+    raw = {key: value for key, value in raw.items() if key != "items"}
 
     return {
         "carrier": _carrier(raw),
@@ -392,6 +420,7 @@ def normalize_parcel(raw: dict, *, include_history: bool = False) -> dict:
         "weight": None,
         "dimensions": None,
         "history": build_history(raw.get("events")) if include_history else None,
+        "items": items,
         # parcel-live/1: filled in by the live tracker while Amazon shows the
         # courier; a fresh poll alone never knows it.
         "live": None,

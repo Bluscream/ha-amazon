@@ -59,7 +59,8 @@ async def test_setup_and_unload(hass):
         (DOMAIN, entry.entry_id), entry.entry_id
     )
     assert device is not None
-    assert device.configuration_url == "https://www.amazon.nl/-/en/gp/css/order-history"
+    # "Visit" opens the account's orders on its storefront, in its own language.
+    assert device.configuration_url == "https://www.amazon.nl/your-orders/orders"
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
@@ -222,3 +223,30 @@ async def test_unreadable_line_is_not_counted_by_the_incoming_sensor(hass):
         await hass.async_block_till_done()
 
     assert hass.states.get("sensor.amazon_amazon_nl_incoming_parcels").state == "1"
+
+
+async def test_a_parcel_is_named_after_its_items_but_keeps_its_barcode_id(hass):
+    entry = _entry()
+    entry.add_to_hass(hass)
+    fetch = AsyncMock(return_value=[active_record()])
+    with patch(PARCELS, new=fetch):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    entity_id = f"sensor.amazon_amazon_nl_parcel_{ACTIVE_CODE.lower()}"
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.attributes["friendly_name"] == (
+        "Amazon (amazon.nl) Example Widget, Blue"
+    )
+
+    # A later poll that names other items renames the sensor, not its id.
+    record = active_record()
+    record["items"] = [{"title": "Other item", "image_url": None}]
+    fetch.return_value = [record]
+    with patch(PARCELS, new=fetch):
+        await entry.runtime_data.coordinator.async_refresh()
+        await hass.async_block_till_done()
+    assert hass.states.get(entity_id).attributes["friendly_name"] == (
+        "Amazon (amazon.nl) Other item"
+    )

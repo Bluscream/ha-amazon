@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
 
-from homeassistant.components.calendar import CalendarEvent, CalendarEntity
+from homeassistant.components.calendar import CalendarEntity, CalendarEvent
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -13,53 +13,32 @@ from homeassistant.util import dt as dt_util
 
 from . import AmazonConfigEntry
 from .account.coordinator import AmazonCoordinator
-from .account.parcels import parse_iso
+from .account.parcels import items_label, parse_iso
 from .device import ATTRIBUTION, build_device_info
 
 PARALLEL_UPDATES = 0
 
 _DEFAULT_EVENT_DURATION = timedelta(hours=1)
-
-
-def _event_summary(parcel: dict) -> str:
-    raw = parcel.get("raw") or {}
-    items = raw.get("items")
-    if items and isinstance(items, list):
-        max_len = 64 if len(items) == 1 else 32
-        shortened = []
-        for item in items:
-            clean = str(item.get("title") if isinstance(item, dict) else item).strip()
-            if len(clean) > max_len:
-                clean = clean[:max_len].rstrip() + "…"
-            shortened.append(f'"{clean}"')
-        return f"📦 Amazon: {', '.join(shortened)}"
-    sender = parcel.get("sender")
-    barcode = parcel.get("barcode") or ""
-    return sender or (f"📦 Amazon: Parcel {barcode}" if barcode else "📦 Amazon delivery")
+_LAST_SECOND = time(23, 59, 59)
 
 
 def _event_bounds(
     start: datetime, end: datetime | None
 ) -> tuple[date | datetime, date | datetime]:
-    # Check if this represents an all-day delivery (no specific hour window)
-    # A whole-day date is stored with time.min (00:00:00) either in its native zone or local time
-    is_midnight = start.time() == time.min or dt_util.as_local(start).time() == time.min
-    if is_midnight and (
-        end is None
-        or end.time() in (time.min, time(23, 59, 59))
-        or dt_util.as_local(end).time() in (time.min, time(23, 59, 59))
-        or end.date() > start.date()
-        or end <= start
-    ):
-        start_date = start.date()
-        if end is None or end.date() <= start_date:
-            end_date = start_date + timedelta(days=1)
-        elif end.time() == time.min:
-            end_date = end.date()
-        else:
-            end_date = end.date() + timedelta(days=1)
-        return start_date, end_date
+    """Return an all-day span for a window of whole days, else the timed one.
 
+    A window naming only days runs from midnight to the last second (or the
+    next midnight) in its own offset; shown as timed it would sit at midnight,
+    or late the evening before for a viewer in another zone.
+    """
+    if (
+        end is not None
+        and end > start
+        and start.time() == time.min
+        and end.time() in (time.min, _LAST_SECOND)
+    ):
+        last = end.date() if end.time() == time.min else end.date() + timedelta(days=1)
+        return start.date(), last
     if end is None or end <= start:
         end = start + _DEFAULT_EVENT_DURATION
     return start, end
@@ -104,7 +83,11 @@ class AmazonDeliveriesCalendar(CoordinatorEntity[AmazonCoordinator], CalendarEnt
             event_start, event_end = _event_bounds(start, end)
 
             barcode = parcel.get("barcode") or ""
-            summary = _event_summary(parcel)
+            summary = (
+                items_label(parcel.get("items"))
+                or parcel.get("sender")
+                or (f"Parcel {barcode}" if barcode else "Amazon parcel")
+            )
             description_parts = [
                 f"Barcode: {barcode}" if barcode else None,
                 f"Status: {parcel.get('status')}" if parcel.get("status") else None,

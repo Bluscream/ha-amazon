@@ -7,7 +7,6 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from custom_components.amazon_orders.account.pages import (
-    OrderTile,
     _day_month,
     build_record,
     business_card_count,
@@ -290,43 +289,63 @@ def test_delivery_photo_falls_back_to_the_noscript_image():
     assert parse_delivery_photo(page) == _PHOTO_PLAIN
 
 
-def test_track_page_extracts_item_image():
-    img_url = "https://m.media-amazon.com/images/I/31J0gqo-WfL._SCLZZZZZZZ__SY300_SX300_.jpg"
-    page = (
-        '<html><body><div class="item-image-wrapper">'
-        f'<img alt="Product" src="{img_url}"/>'
-        '</div></body></html>'
+_IMAGE = "https://img.example.test/images/I/fakeItem01"
+
+
+def test_each_order_line_takes_its_own_thumbnail():
+    tiles = parse_order_tiles(
+        orders_page(
+            tile(ACTIVE_SHIPMENT, "Arriving today", None, image=_IMAGE),
+            tile(ACTIVE_SHIPMENT, "Arriving today", None, line_item="l2"),
+            tile(
+                ACTIVE_SHIPMENT,
+                "Arriving today",
+                None,
+                line_item="l3",
+                image=_IMAGE + "3",
+            ),
+        ),
+        TODAY,
     )
-    info = parse_track_page(page, TODAY)
-    assert info.item_image_url == img_url
-    assert info.item_image_urls == [img_url]
-
-
-def test_track_page_extracts_multiple_item_images_and_order_items():
-    img1 = "https://m.media-amazon.com/images/I/item1.jpg"
-    img2 = "https://m.media-amazon.com/images/I/item2.jpg"
-    page = (
-        '<html><body>'
-        f'<img class="product-image" src="{img1}"/>'
-        f'<img class="product-image" src="{img2}"/>'
-        f'<img class="duplicate" src="{img1}"/>'
-        '</body></html>'
-    )
-    info = parse_track_page(page, TODAY)
-    assert info.item_image_url == img1
-    assert info.item_image_urls == [img1, img2]
-
-    # Test build_record with multiple tiles and multiple images
-    tiles = [
-        OrderTile("001", "L1", "S1", "1", "/pop1", "First Item", "Shipped", None, TODAY, None),
-        OrderTile("001", "L2", "S1", "1", "/pop2", "Second Item", "Shipped", None, TODAY, None),
+    # The larger rendition wins; a line without a thumbnail never borrows the
+    # next line's.
+    assert [t.image_url for t in tiles] == [
+        f"{_IMAGE}._SS284_.jpg",
+        None,
+        f"{_IMAGE}3._SS284_.jpg",
     ]
-    record = build_record(COUNTRY, tiles, "/track", info)
-    assert record["image_url"] == img1
-    assert record["image_urls"] == [img1, img2]
-    assert record["order_items"] == [
-        {"title": "First Item", "image_url": img1},
-        {"title": "Second Item", "image_url": img2},
+
+
+def test_a_thumbnail_without_the_larger_rendition_or_https_link():
+    small = tile(ACTIVE_SHIPMENT, "Arriving today", None, image=_IMAGE).replace(
+        f' data-a-hires="{_IMAGE}._SS284_.jpg"', ""
+    )
+    plain = small.replace("https://", "http://", 1)
+    (with_small,) = parse_order_tiles(orders_page(small), TODAY)
+    (with_plain,) = parse_order_tiles(orders_page(plain), TODAY)
+    assert with_small.image_url == f"{_IMAGE}._SS142_.jpg"
+    assert with_plain.image_url is None
+
+
+def test_the_last_line_does_not_take_an_image_far_below_it():
+    far = '<div class="product-image"><img src="https://img.example.test/r.jpg"></div>'
+    page = orders_page(tile(ACTIVE_SHIPMENT, "Arriving today", None)) + "x" * 5000 + far
+    (line,) = parse_order_tiles(page, TODAY)
+    assert line.image_url is None
+
+
+def test_the_record_lists_each_item_with_its_image():
+    tiles = parse_order_tiles(
+        orders_page(
+            tile(ACTIVE_SHIPMENT, "Arriving today", None, image=_IMAGE),
+            tile(ACTIVE_SHIPMENT, "Arriving today", None, line_item="l2", title="Two"),
+        ),
+        TODAY,
+    )
+    record = build_record(COUNTRY, tiles, None, None)
+    assert record["items"] == [
+        {"title": "Example Widget, Blue", "image_url": f"{_IMAGE}._SS284_.jpg"},
+        {"title": "Two", "image_url": None},
     ]
 
 
@@ -460,7 +479,7 @@ def test_record_with_a_tracking_page():
     assert record["delivered_on"] == "2026-10-03"
     assert record["order_status"] == "Delivered 3 October"
     assert record["track_path"] == path
-    assert record["items"] == ["Example Widget, Blue"]
+    assert record["items"] == [{"title": "Example Widget, Blue", "image_url": None}]
     assert len(record["events"]) == 4
     assert record["delivery_photo_url"] is None
 

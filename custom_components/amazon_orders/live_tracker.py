@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING, Any
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
-from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_call_later
 from homeassistant.util import dt as dt_util
 
@@ -32,7 +31,6 @@ from .const import (
     LIVE_INTERVAL_SECONDS,
     LIVE_PROBE_SECONDS,
     ParcelStatus,
-    live_signal,
 )
 
 if TYPE_CHECKING:
@@ -92,7 +90,6 @@ class LiveTracker:
         }
         for parcel in parcels:
             parcel["live"] = self.readings.get(parcel.get("barcode") or "")
-        self._signal()
         self._reschedule()
 
     @callback
@@ -152,7 +149,6 @@ class LiveTracker:
         for parcel in self._parcels:
             parcel["live"] = self.readings.get(parcel.get("barcode") or "")
         self._coordinator.async_update_listeners()
-        self._signal()
         if delivered:
             await self._coordinator.async_request_refresh()
         self._reschedule()
@@ -194,7 +190,3 @@ class LiveTracker:
             },
             EVENT_PARCEL_LIVE_UPDATED,
         )
-
-    @callback
-    def _signal(self) -> None:
-        async_dispatcher_send(self._hass, live_signal(self._entry.entry_id))

@@ -11,18 +11,9 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 
-from .const import CONF_COUNTRY, DOMAIN
-
-CONFIGURATION_URL = "https://www.amazon.com/-/en/gp/css/order-history"
+from .const import CONF_COUNTRY, DOMAIN, ORDERS_PATHS
 
 ATTRIBUTION = "Data provided by Amazon"
-
-
-def configuration_url(entry: ConfigEntry) -> str:
-    """Return the order history URL for the storefront this entry tracks."""
-    domain = (entry.data or {}).get(CONF_COUNTRY) or "amazon.com"
-    domain = domain.removeprefix("www.")
-    return f"https://www.{domain}/-/en/gp/css/order-history"
 
 
 def build_device_info(entry: ConfigEntry) -> DeviceInfo:
@@ -37,5 +28,7 @@ def build_device_info(entry: ConfigEntry) -> DeviceInfo:
         name=f"Amazon ({entry.title})",
         manufacturer="Amazon",
         entry_type=DeviceEntryType.SERVICE,
-        configuration_url=configuration_url(entry),
+        # "Visit" opens this account's orders on its own storefront, in the
+        # language the user picked there.
+        configuration_url=f"https://www.{entry.data[CONF_COUNTRY]}{ORDERS_PATHS[0]}",
     )

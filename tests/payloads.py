@@ -38,8 +38,13 @@ def tile(
     package_id: str = "1",
     placed_anchor: str = "Order placed",
     href: str | None = None,
+    image: str | None = None,
 ) -> str:
-    """One order line, labelled the way the page labels it."""
+    """One order line, labelled the way the page labels it.
+
+    ``image`` adds the product thumbnail the page shows beside the line, with
+    the larger rendition in ``data-a-hires`` as on the real page.
+    """
     tail = f", {status}" + (f", {note}" if note else "") if status else ""
     label = escape(f"{title}, {placed_anchor} {placed}{tail}")
     href = href or (
@@ -53,9 +58,16 @@ def tile(
         + package_id
         + "&asin=B000TEST00"
     )
+    thumbnail = (
+        '<div class="product-image aok-dm-img--rounded-sm">\n'
+        f'<img alt="{escape(title)}" src="{escape(image)}._SS142_.jpg"'
+        f' data-a-hires="{escape(image)}._SS284_.jpg"></div>'
+        if image
+        else ""
+    )
     return (
         f'<li><a class="item-card__link" href="{escape(href)}" '
-        f'aria-label="{label}"></a></li>'
+        f'aria-label="{label}"></a>{thumbnail}</li>'
     )
 
 
@@ -223,7 +235,7 @@ def delivered_record(code: str = DELIVERED_CODE) -> dict:
             ),
             event("2026-10-02T00:00:00+02:00", "Package left the courier facility"),
         ],
-        "items": ["Example Widget, Blue"],
+        "items": [{"title": "Example Widget, Blue", "image_url": None}],
         "pop_path": "/-/en/your-orders/pop?orderId=" + ORDER_ID,
         "track_path": track_path(DELIVERED_SHIPMENT),
         "page_state": {"customerId": FAKE_CUSTOMER},
@@ -277,7 +289,7 @@ def untracked_record() -> dict:
         "delivered_on": None,
         "milestone": None,
         "events": [],
-        "items": ["Example Widget, Blue"],
+        "items": [{"title": "Example Widget, Blue", "image_url": None}],
         "pop_path": "/-/en/your-orders/pop?orderId=" + ORDER_ID,
         "track_path": None,
         "page_state": {},

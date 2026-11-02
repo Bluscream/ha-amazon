@@ -247,3 +247,11 @@ def test_the_response_code_of_a_refusal():
     )
     assert response_code({"success": True}) is None
     assert response_code(None) is None
+
+
+def test_an_answer_without_a_timeline_still_reads_its_state():
+    payload = location_state(callout="3 stops away")
+    del payload["value"]["packageLocationTimeline"]
+    reading = parse_location_state(payload)
+    assert reading is not None
+    assert reading.trail == [] and reading.stops_away == 3

@@ -8,14 +8,12 @@ from dataclasses import dataclass
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CoreState, HomeAssistant
-from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.start import async_at_started
 
 from .account.client import AmazonClient
 from .account.coordinator import AmazonCoordinator, business_lines_store
 from .const import CONF_COUNTRY, CONF_REFRESH_TOKEN, DOMAIN, PLATFORMS
-from .device import build_device_info
 from .handoff import HandOff, async_clear_issues
 from .live_tracker import LiveTracker
 
@@ -68,12 +66,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: AmazonConfigEntry) -> bo
 
     entry.runtime_data = AmazonData(
         client=client, coordinator=coordinator, session=session, live=live
-    )
-
-    dev_reg = dr.async_get(hass)
-    dev_reg.async_get_or_create(
-        config_entry_id=entry.entry_id,
-        **build_device_info(entry),
     )
 
     try:

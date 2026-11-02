@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 from custom_components.amazon_orders.const import ParcelStatus
 from custom_components.amazon_orders.sensor import (
     AmazonAwaitingPickupSensor,
+    AmazonCourierStopsAwaySensor,
     AmazonDeliveredParcelsSensor,
     AmazonEnRouteToPickupPointSensor,
     AmazonIncomingParcelsSensor,
@@ -33,7 +34,6 @@ def _parcel(
     status: ParcelStatus = ParcelStatus.IN_TRANSIT,
     pickup: bool = False,
     planned_from: str | None = None,
-    raw: dict | None = None,
 ) -> dict:
     return {
         "carrier": "Amazon",
@@ -43,7 +43,6 @@ def _parcel(
         "status": status,
         "pickup": pickup,
         "planned_from": planned_from,
-        "raw": raw or {},
     }
 
 
@@ -55,71 +54,10 @@ def test_incoming_counts_and_lists():
 
 
 def test_parcel_sensor_status_and_attributes():
-    parcel = _parcel(
-        "A",
-        status=ParcelStatus.OUT_FOR_DELIVERY,
-        raw={
-            "items": ["First Item That Is Quite Long And Will Be Truncated", "Second Item"],
-            "image_url": "https://m.media-amazon.com/images/I/sample.jpg",
-        },
-    )
+    parcel = _parcel("A", status=ParcelStatus.OUT_FOR_DELIVERY)
     sensor = AmazonParcelSensor(_coordinator([parcel]), _entry(), "A")
     assert sensor.native_value == ParcelStatus.OUT_FOR_DELIVERY
-    assert sensor.entity_picture == "https://m.media-amazon.com/images/I/sample.jpg"
     assert sensor.extra_state_attributes["barcode"] == "A"
-    assert sensor.translation_placeholders == {
-        "barcode": 'with "First Item That Is Quite Long An…", "Second Item"'
-    }
-
-
-def test_parcel_sensor_tiled_entity_picture():
-    img1 = "https://m.media-amazon.com/images/I/item1.jpg"
-    img2 = "https://m.media-amazon.com/images/I/item2.jpg"
-    parcel = _parcel(
-        "A",
-        status=ParcelStatus.OUT_FOR_DELIVERY,
-        raw={
-            "items": ["Item 1", "Item 2"],
-            "image_urls": [img1, img2],
-            "order_items": [
-                {"title": "Item 1", "image_url": img1},
-                {"title": "Item 2", "image_url": img2},
-            ],
-        },
-    )
-    sensor = AmazonParcelSensor(_coordinator([parcel]), _entry(), "A")
-    picture = sensor.entity_picture
-    assert picture is not None
-    assert picture.startswith("data:image/svg+xml;utf8,")
-    assert "topleft" in picture
-    assert "bottomright" in picture
-    assert "item1.jpg" in picture
-    assert "item2.jpg" in picture
-
-
-def test_parcel_sensor_single_item_truncation():
-    # 80 chars - should not be truncated because single item limit is 128
-    title_80 = "Veet Expert Hair Removal Cream Sensitive Skin with Shea Butter & Tested Formula"
-    parcel = _parcel(
-        "A",
-        raw={"items": [title_80]},
-    )
-    sensor = AmazonParcelSensor(_coordinator([parcel]), _entry(), "A")
-    assert sensor.translation_placeholders == {
-        "barcode": f'with "{title_80}"'
-    }
-
-    # 140 chars - should be truncated to 128 chars + ellipsis
-    long_title = "A" * 140
-    parcel_long = _parcel(
-        "B",
-        raw={"items": [long_title]},
-    )
-    sensor_long = AmazonParcelSensor(_coordinator([parcel_long]), _entry(), "B")
-    expected_title = ("A" * 128) + "…"
-    assert sensor_long.translation_placeholders == {
-        "barcode": f'with "{expected_title}"'
-    }
 
 
 def test_parcel_sensor_missing_barcode():
@@ -199,3 +137,82 @@ def test_last_update_sensor():
     coordinator.last_success_time = moment
     sensor = AmazonLastUpdateSensor(coordinator, _entry())
     assert sensor.native_value == moment
+
+
+def _items(*titles: str, image: str | None = None) -> list[dict]:
+    return [
+        {"title": title, "image_url": image if index == 0 else None}
+        for index, title in enumerate(titles)
+    ]
+
+
+def test_parcel_sensor_is_named_after_its_items_once_added():
+    parcel = {**_parcel("A"), "items": _items("Widget", "Gadget")}
+    sensor = AmazonParcelSensor(_coordinator([parcel]), _entry(), "A")
+    # Until the entity has its id, the translated barcode name stands.
+    assert not hasattr(sensor, "_attr_name")
+    assert sensor.translation_placeholders == {"barcode": "A"}
+
+    sensor._name_after_items()
+    assert sensor.name == "Widget, Gadget"
+
+
+def test_parcel_sensor_keeps_its_last_name_when_a_poll_has_no_items():
+    parcel = {**_parcel("A"), "items": _items("Widget")}
+    coordinator = _coordinator([parcel])
+    sensor = AmazonParcelSensor(coordinator, _entry(), "A")
+    sensor._name_after_items()
+    coordinator.data = [{**_parcel("A"), "items": None}]
+    sensor._name_after_items()
+    assert sensor.name == "Widget"
+
+
+def test_parcel_sensor_without_items_keeps_the_barcode_name():
+    sensor = AmazonParcelSensor(_coordinator([_parcel("A")]), _entry(), "A")
+    sensor._name_after_items()
+    assert not hasattr(sensor, "_attr_name")
+
+
+def test_parcel_sensor_picture_is_the_first_items_image():
+    with_image = {
+        **_parcel("A"),
+        "items": _items("Widget", "Gadget", image="https://x/1.jpg"),
+    }
+    without = {**_parcel("B"), "items": _items("Widget")}
+    assert (
+        AmazonParcelSensor(_coordinator([with_image]), _entry(), "A").entity_picture
+        == "https://x/1.jpg"
+    )
+    assert (
+        AmazonParcelSensor(_coordinator([without]), _entry(), "B").entity_picture
+        is None
+    )
+    assert AmazonParcelSensor(_coordinator([]), _entry(), "C").entity_picture is None
+
+
+def _live(state: str, stops: int | None, message: str = "") -> dict:
+    return {"state": state, "stops_away": stops, "message": message}
+
+
+def test_courier_stops_away_takes_the_nearest_courier_on_the_road():
+    parcels = [
+        {**_parcel("FAR"), "live": _live("en_route", 7)},
+        {**_parcel("NEAR"), "live": _live("next_stop", 0, "You're next")},
+        {**_parcel("DONE"), "live": _live("delivered", None)},
+        {**_parcel("NONE"), "live": None},
+    ]
+    sensor = AmazonCourierStopsAwaySensor(_coordinator(parcels), _entry())
+    assert sensor.native_value == 0
+    assert sensor.extra_state_attributes == {
+        "barcode": "NEAR",
+        "live_state": "next_stop",
+        "message": "You're next",
+    }
+
+
+def test_courier_stops_away_is_unknown_without_a_courier():
+    sensor = AmazonCourierStopsAwaySensor(
+        _coordinator([{**_parcel("A"), "live": _live("en_route", None)}]), _entry()
+    )
+    assert sensor.native_value is None
+    assert sensor.extra_state_attributes == {}

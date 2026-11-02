@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import urllib.parse
 from datetime import datetime
 from typing import Any
 
@@ -21,7 +20,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import AmazonConfigEntry
 from .account.coordinator import AmazonCoordinator
-from .account.parcels import parse_iso
+from .account.parcels import items_label, parse_iso
 from .const import DOMAIN, ParcelStatus
 from .device import ATTRIBUTION, build_device_info
 
@@ -154,84 +153,13 @@ class AmazonIncomingParcelsSensor(CoordinatorEntity[AmazonCoordinator], SensorEn
         super()._handle_coordinator_update()
 
 
-def build_tiled_image_svg(image_urls: list[str]) -> str | None:
-    """Generate an SVG data URI collage for multiple item images.
-
-    - 1 image: return the URL directly.
-    - 2 images: diagonal split from bottom-left (0, 256) to top-right (256, 0).
-    - 3 images: top half split vertically, bottom half full width.
-    - 4+ images: 2x2 grid.
-    """
-    valid = [u for u in image_urls if u and isinstance(u, str)]
-    if not valid:
-        return None
-    if len(valid) == 1:
-        return valid[0]
-
-    u1 = valid[0]
-    u2 = valid[1]
-
-    if len(valid) == 2:
-        svg = (
-            '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
-            'width="256" height="256" viewBox="0 0 256 256">'
-            '<defs>'
-            '<clipPath id="topleft"><polygon points="0,0 256,0 0,256"/></clipPath>'
-            '<clipPath id="bottomright"><polygon points="256,0 256,256 0,256"/></clipPath>'
-            '</defs>'
-            f'<image href="{u1}" width="256" height="256" preserveAspectRatio="xMidYMid slice" clip-path="url(#topleft)"/>'
-            f'<image href="{u2}" width="256" height="256" preserveAspectRatio="xMidYMid slice" clip-path="url(#bottomright)"/>'
-            '<line x1="0" y1="256" x2="256" y2="0" stroke="#ffffff" stroke-width="3"/>'
-            '</svg>'
-        )
-    elif len(valid) == 3:
-        u3 = valid[2]
-        svg = (
-            '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
-            'width="256" height="256" viewBox="0 0 256 256">'
-            '<defs>'
-            '<clipPath id="c1"><rect x="0" y="0" width="128" height="128"/></clipPath>'
-            '<clipPath id="c2"><rect x="128" y="0" width="128" height="128"/></clipPath>'
-            '<clipPath id="c3"><rect x="0" y="128" width="256" height="128"/></clipPath>'
-            '</defs>'
-            f'<image href="{u1}" x="0" y="0" width="128" height="128" preserveAspectRatio="xMidYMid slice" clip-path="url(#c1)"/>'
-            f'<image href="{u2}" x="128" y="0" width="128" height="128" preserveAspectRatio="xMidYMid slice" clip-path="url(#c2)"/>'
-            f'<image href="{u3}" x="0" y="128" width="256" height="128" preserveAspectRatio="xMidYMid slice" clip-path="url(#c3)"/>'
-            '<line x1="128" y1="0" x2="128" y2="128" stroke="#ffffff" stroke-width="2"/>'
-            '<line x1="0" y1="128" x2="256" y2="128" stroke="#ffffff" stroke-width="2"/>'
-            '</svg>'
-        )
-    else:
-        u3 = valid[2]
-        u4 = valid[3]
-        svg = (
-            '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
-            'width="256" height="256" viewBox="0 0 256 256">'
-            '<defs>'
-            '<clipPath id="c1"><rect x="0" y="0" width="128" height="128"/></clipPath>'
-            '<clipPath id="c2"><rect x="128" y="0" width="128" height="128"/></clipPath>'
-            '<clipPath id="c3"><rect x="0" y="128" width="128" height="128"/></clipPath>'
-            '<clipPath id="c4"><rect x="128" y="128" width="128" height="128"/></clipPath>'
-            '</defs>'
-            f'<image href="{u1}" x="0" y="0" width="128" height="128" preserveAspectRatio="xMidYMid slice" clip-path="url(#c1)"/>'
-            f'<image href="{u2}" x="128" y="0" width="128" height="128" preserveAspectRatio="xMidYMid slice" clip-path="url(#c2)"/>'
-            f'<image href="{u3}" x="0" y="128" width="128" height="128" preserveAspectRatio="xMidYMid slice" clip-path="url(#c3)"/>'
-            f'<image href="{u4}" x="128" y="128" width="128" height="128" preserveAspectRatio="xMidYMid slice" clip-path="url(#c4)"/>'
-            '<line x1="128" y1="0" x2="128" y2="256" stroke="#ffffff" stroke-width="2"/>'
-            '<line x1="0" y1="128" x2="256" y2="128" stroke="#ffffff" stroke-width="2"/>'
-            '</svg>'
-        )
-
-    return "data:image/svg+xml;utf8," + urllib.parse.quote(svg)
-
-
 class AmazonParcelSensor(CoordinatorEntity[AmazonCoordinator], SensorEntity):
     """Per-parcel sensor reporting the status of one tracked Amazon parcel."""
 
     _attr_has_entity_name = True
     _attr_translation_key = "parcel"
     _attr_attribution = ATTRIBUTION
-    _unrecorded_attributes = frozenset({"raw", "history", "live"})
+    _unrecorded_attributes = frozenset({"raw", "history", "items", "live"})
 
     def __init__(
         self, coordinator: AmazonCoordinator, entry: ConfigEntry, barcode: str
@@ -243,7 +171,6 @@ class AmazonParcelSensor(CoordinatorEntity[AmazonCoordinator], SensorEntity):
         self._attr_unique_id = f"{entry.entry_id}_{barcode}"
         self._attr_translation_placeholders = {"barcode": barcode}
         self._attr_device_info = build_device_info(entry)
-        self._update_placeholders()
 
     def _get_parcel(self) -> dict[str, Any] | None:
         for parcel in self.coordinator.data or []:
@@ -251,47 +178,26 @@ class AmazonParcelSensor(CoordinatorEntity[AmazonCoordinator], SensorEntity):
                 return parcel
         return None
 
-    def _update_placeholders(self) -> None:
-        parcel = self._get_parcel()
-        items = (parcel.get("raw") or {}).get("items") if parcel else None
-        if items and isinstance(items, list):
-            max_len = 128 if len(items) == 1 else 32
-            shortened = []
-            for item in items:
-                clean = str(item).strip()
-                if len(clean) > max_len:
-                    clean = clean[:max_len].rstrip() + "…"
-                shortened.append(f'"{clean}"')
-            new_placeholders = {
-                "barcode": f"with {', '.join(shortened)}"
-            }
-        else:
-            new_placeholders = {"barcode": self._barcode}
+    def _name_after_items(self) -> None:
+        """Name the sensor after its items once they are known.
 
-        if getattr(self, "_attr_translation_placeholders", None) != new_placeholders:
-            self._attr_translation_placeholders = new_placeholders
-            # Invalidate cached name and friendly_name if calculated
-            self.__dict__.pop("name", None)
-            self._cached_friendly_name = None
-            if self.hass and self.registry_entry:
-                registry = er.async_get(self.hass)
-                expected_original_name = self.name
-                if (
-                    expected_original_name
-                    and expected_original_name != self.registry_entry.original_name
-                ):
-                    self.registry_entry = registry.async_update_entity(
-                        self.entity_id,
-                        original_name=expected_original_name,
-                    )
+        Not done in ``__init__``: the entity id is made from the first name,
+        and must stay the barcode's, not change with (or reveal) the items.
+        Until a parcel names an item, the translated "Parcel <barcode>"
+        stands; once it has, a later poll without items keeps the last name.
+        """
+        parcel = self._get_parcel()
+        label = items_label(parcel.get("items")) if parcel else None
+        if label and label != getattr(self, "_attr_name", None):
+            self._attr_name = label
 
     async def async_added_to_hass(self) -> None:
-        """Sync dynamic item names into registry when added to hass."""
+        """Take the items' name as soon as the entity has its id."""
         await super().async_added_to_hass()
-        self._update_placeholders()
+        self._name_after_items()
 
     def _handle_coordinator_update(self) -> None:
-        self._update_placeholders()
+        self._name_after_items()
         super()._handle_coordinator_update()
 
     @property
@@ -302,29 +208,11 @@ class AmazonParcelSensor(CoordinatorEntity[AmazonCoordinator], SensorEntity):
 
     @property
     def entity_picture(self) -> str | None:
-        """Return the product image URL (or tiled collage if multiple items), or delivery photo if delivered."""
+        """Return the first item's product image, if Amazon showed one."""
         parcel = self._get_parcel()
-        if not parcel:
-            return None
-        raw = parcel.get("raw") or {}
-        image_urls = raw.get("image_urls")
-        if not image_urls:
-            order_items = raw.get("order_items")
-            if order_items and isinstance(order_items, list):
-                image_urls = [
-                    item.get("image_url")
-                    for item in order_items
-                    if isinstance(item, dict) and item.get("image_url")
-                ]
-        if image_urls and len(image_urls) > 1:
-            tiled = build_tiled_image_svg(image_urls)
-            if tiled:
-                return tiled
-
-        return (
-            raw.get("image_url")
-            or raw.get("delivery_photo_url")
-            or parcel.get("delivery_photo_url")
+        items = (parcel.get("items") if parcel else None) or []
+        return next(
+            (item["image_url"] for item in items if item.get("image_url")), None
         )
 
     @property

@@ -22,13 +22,17 @@ from ..payloads import (
     COUNTRY,
     DELIVERED_CODE,
     DELIVERED_EVENTS,
+    FAKE_CSRF,
     FEEDBACK_PATH,
+    LIVE_SHIPMENT_ID,
     ORDER_ID,
     business_card,
     business_history,
     business_order_path,
     business_shell,
     business_tracker_path,
+    live_point,
+    location_state,
     orders_page,
     pop_page,
     progress_tracker_path,
@@ -408,7 +412,10 @@ async def test_order_lines_of_one_shipment_cost_one_read():
 
     (record,) = await _client(session).async_get_parcels()
 
-    assert record["items"] == ["Example Widget, Blue", "Second item"]
+    assert record["items"] == [
+        {"title": "Example Widget, Blue", "image_url": None},
+        {"title": "Second item", "image_url": None},
+    ]
     assert sum("pop?" in url for url in _gets(session)) == 1
 
 
@@ -1045,3 +1052,133 @@ async def test_delivered_business_cards_do_not_use_up_the_page_loads():
     assert statuses == ["delivered"] * 11 + ["in_transit"] * 2
     page_loads = [url for url in _gets(session) if "progress-tracker" in url]
     assert len(page_loads) == 2 <= client_module.MAX_TRACK_LOADS
+
+
+# ---------------------------------------------------------------------------
+# courier map (parcel-live/1)
+# ---------------------------------------------------------------------------
+
+LIVE_FRAGMENT = "package-location/get-state"
+
+
+async def _live_client(**page) -> tuple[AmazonClient, FakeSession]:
+    """A client that has read one in-flight shipment whose page offers the map."""
+    session = _session(_active_tile("SHIPactive1"))
+    _shipment(
+        session,
+        "SHIPactive1",
+        milestone="IN_PROGRESS",
+        tracking_id=ACTIVE_CODE,
+        csrf_token=FAKE_CSRF,
+        shipment_id=LIVE_SHIPMENT_ID,
+        **page,
+    )
+    client = _client(session)
+    await client.async_get_parcels()
+    return client, session
+
+
+def _live_posts(session: FakeSession) -> list[dict]:
+    return [
+        kwargs
+        for method, url, kwargs in session.calls
+        if method == "POST" and LIVE_FRAGMENT in url
+    ]
+
+
+async def test_a_poll_remembers_what_the_courier_map_needs():
+    client, _ = await _live_client()
+    assert client.can_read_live(ACTIVE_CODE)
+    assert not client.can_read_live("SOMETHING-ELSE")
+
+
+async def test_a_page_without_the_token_offers_no_map():
+    session = _session(_active_tile("SHIPactive1"))
+    _shipment(session, "SHIPactive1", milestone="IN_PROGRESS", tracking_id=ACTIVE_CODE)
+    client = _client(session)
+    await client.async_get_parcels()
+    assert not client.can_read_live(ACTIVE_CODE)
+    assert await client.async_read_live(ACTIVE_CODE) is None
+
+
+async def test_a_live_read_asks_as_the_page_does_and_counts_up():
+    client, session = await _live_client()
+    session.add("POST", LIVE_FRAGMENT, FakeResponse(200, location_state(live_point(0))))
+
+    first = await client.async_read_live(ACTIVE_CODE)
+    await client.async_read_live(ACTIVE_CODE)
+
+    assert first is not None and first.stops_away == 4
+    posts = _live_posts(session)
+    assert [p["data"]["numberOfMemoizations"] for p in posts] == ["0", "1"]
+    assert posts[0]["data"]["csrfToken"] == FAKE_CSRF
+    assert posts[0]["data"]["shipmentId"] == LIVE_SHIPMENT_ID
+    headers = posts[0]["headers"]
+    assert headers["X-Requested-With"] == "XMLHttpRequest"
+    assert headers["Referer"].endswith(track_path("SHIPactive1"))
+
+
+@pytest.mark.parametrize(
+    "refusal",
+    [
+        FakeResponse(200, {"success": False, "responseCode": "INVALID_TOKEN"}),
+        FakeResponse(403, "denied"),
+        FakeResponse(200, ValueError("a sign-in page, not JSON")),
+    ],
+)
+async def test_a_refused_token_is_renewed_from_a_fresh_page_once(refusal):
+    client, session = await _live_client()
+    session.add(
+        "POST",
+        LIVE_FRAGMENT,
+        refusal,
+        FakeResponse(200, location_state(live_point(0))),
+    )
+    reading = await client.async_read_live(ACTIVE_CODE)
+    assert reading is not None
+    assert len(_live_posts(session)) == 2
+    # The renewal re-read the tracking page after minting fresh cookies.
+    assert sum("ship-track" in url for url in _gets(session)) == 2
+
+
+async def test_a_renewed_page_without_the_map_ends_live_reading():
+    client, session = await _live_client()
+    session.add(
+        "POST",
+        LIVE_FRAGMENT,
+        FakeResponse(200, {"success": False, "responseCode": "INVALID_TOKEN"}),
+    )
+    session.add(
+        "GET",
+        "orderId=000-0000001-0000001&shipmentId=SHIPactive1",
+        FakeResponse(200, track_page(tracking_id=ACTIVE_CODE)),
+    )
+    assert await client.async_read_live(ACTIVE_CODE) is None
+    assert not client.can_read_live(ACTIVE_CODE)
+
+
+async def test_a_renewal_landing_on_a_sign_in_page_is_an_auth_error():
+    client, session = await _live_client()
+    session.add("POST", LIVE_FRAGMENT, FakeResponse(401, "no"))
+    session.add(
+        "GET",
+        "orderId=000-0000001-0000001&shipmentId=SHIPactive1",
+        FakeResponse(200, '<form><input type="password"></form>'),
+    )
+    with pytest.raises(AmazonAuthError):
+        await client.async_read_live(ACTIVE_CODE)
+
+
+async def test_a_rate_limited_live_read_raises():
+    client, session = await _live_client()
+    session.add("POST", LIVE_FRAGMENT, FakeResponse(429, "slow down"))
+    with pytest.raises(AmazonApiError) as err:
+        await client.async_read_live(ACTIVE_CODE)
+    assert err.value.status_code == 429
+
+
+async def test_a_shipment_that_leaves_the_list_is_forgotten_for_live_reads():
+    client, session = await _live_client()
+    session.add("GET", "/your-orders/orders", FakeResponse(200, orders_page()))
+    await client.async_get_parcels()
+    assert not client.can_read_live(ACTIVE_CODE)

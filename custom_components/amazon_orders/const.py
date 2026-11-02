@@ -27,13 +27,7 @@ class ParcelStatus(StrEnum):
     UNKNOWN = "unknown"  # Raw status we have not mapped yet
 
 
-PLATFORMS = [
-    Platform.BUTTON,
-    Platform.CALENDAR,
-    Platform.DEVICE_TRACKER,
-    Platform.GEO_LOCATION,
-    Platform.SENSOR,
-]
+PLATFORMS = [Platform.BUTTON, Platform.CALENDAR, Platform.SENSOR]
 
 # Every optional key the parcel contract defines, plus ``live`` from the
 # parcel-live/1 extension. CAPABILITIES below must be a subset of this — it
@@ -212,10 +206,11 @@ HAND_OFF_CARRIERS = {
 HAND_OFF_COVERED_BY = {"dhl": ("dhl_nl",)}
 SERVICE_TRACK_PARCEL = "track_parcel"
 
-# Live courier tracking (parcel-live/1, see the fork's LIVE_TRACKING.md). On by
-# default: it only ever reads parcels Amazon's own fleet has out for delivery,
-# and only while the tracking page offers the courier map. The tracking page
-# itself asks every 30 s; a minute is plenty for a dashboard and half the load.
+# Live courier tracking (parcel-live/1, see the fork's PARCEL_EXTENSIONS.md).
+# On by default: it only ever reads parcels Amazon's own fleet has out for
+# delivery, and only while the tracking page offers the courier map. The
+# tracking page itself asks every 30 s; a minute is plenty for a dashboard and
+# half the load.
 CONF_LIVE_TRACKING = "live_tracking"
 DEFAULT_LIVE_TRACKING = True
 LIVE_INTERVAL_SECONDS = 60
@@ -224,8 +219,3 @@ LIVE_INTERVAL_SECONDS = 60
 LIVE_PROBE_SECONDS = 300
 LIVE_BACKOFF_CAP_SECONDS = 1800
 EVENT_PARCEL_LIVE_UPDATED = f"{DOMAIN}_parcel_live_updated"
-
-
-def live_signal(entry_id: str) -> str:
-    """Dispatcher signal sent after every live read of one config entry."""
-    return f"{DOMAIN}_live_{entry_id}"

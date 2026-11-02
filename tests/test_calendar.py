@@ -1,7 +1,9 @@
 """Tests for the Amazon deliveries calendar."""
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import MagicMock
+
+import pytest
 
 from custom_components.amazon_orders.calendar import AmazonDeliveriesCalendar
 
@@ -108,21 +110,33 @@ async def test_get_events_filters_by_range():
     assert {e.uid for e in events} == {"FUTURE"}
 
 
-def test_all_day_event_when_midnight():
-    from datetime import date
-    cal = _cal(
-        [
-            {
-                "barcode": "ALLDAY",
-                "planned_from": "2099-01-01T00:00:00Z",
-                "planned_to": "2099-01-01T23:59:59Z",
-                "raw": {"items": ["Item A", "Item B"]},
-            }
-        ]
-    )
-    events = cal._events()
-    assert len(events) == 1
-    assert events[0].start == date(2099, 1, 1)
-    assert events[0].end == date(2099, 1, 2)
-    assert events[0].all_day is True
-    assert events[0].summary == '📦 Amazon: "Item A", "Item B"'
+@pytest.mark.parametrize(
+    "planned_to,end",
+    [
+        ("2099-01-01T23:59:59+01:00", date(2099, 1, 2)),
+        ("2099-01-03T00:00:00+01:00", date(2099, 1, 3)),
+    ],
+)
+def test_a_window_of_whole_days_is_an_all_day_event(planned_to, end):
+    parcel = {
+        **_parcel("ALLDAY", planned_from="2099-01-01T00:00:00+01:00"),
+        "planned_to": planned_to,
+        "items": [
+            {"title": "Widget", "image_url": None},
+            {"title": "Gadget", "image_url": None},
+        ],
+    }
+    (event,) = _cal([parcel])._events()
+    assert (event.start, event.end) == (date(2099, 1, 1), end)
+    assert event.all_day is True
+    assert event.summary == "Widget, Gadget"
+
+
+def test_a_timed_window_stays_timed():
+    parcel = {
+        **_parcel("TIMED", planned_from="2099-01-01T18:00:00+01:00"),
+        "planned_to": "2099-01-01T22:00:00+01:00",
+    }
+    (event,) = _cal([parcel])._events()
+    assert event.all_day is False
+    assert event.end - event.start == timedelta(hours=4)
