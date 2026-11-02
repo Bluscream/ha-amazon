@@ -159,6 +159,10 @@ class OrderTile:
     # False for a line whose link leads to no tracking (a Business order page).
     follow: bool = True
     image_url: str | None = None
+    item_url: str | None = None
+    item_price: float | None = None
+    item_price_currency: str | None = None
+    asin: str | None = None
 
     @property
     def shipment_key(self) -> str:
@@ -229,6 +233,75 @@ def _day_month(text: str, reference: date, *, forward: bool = False) -> date | N
     return found
 
 
+_ASIN_PATH_RE = re.compile(r"/(?:dp|gp/product)/([A-Za-z0-9]{10})", re.I)
+_ASIN_PARAM_RE = re.compile(r"[?&]asin=([A-Za-z0-9]{10})\b", re.I)
+
+_CURRENCY_SYMBOLS: dict[str, str] = {
+    "€": "EUR",
+    "EUR": "EUR",
+    "$": "USD",
+    "USD": "USD",
+    "£": "GBP",
+    "GBP": "GBP",
+    "¥": "JPY",
+    "JPY": "JPY",
+    "C$": "CAD",
+    "CAD": "CAD",
+    "A$": "AUD",
+    "AUD": "AUD",
+}
+
+_PRICE_TOKEN_RE = re.compile(
+    r"(?:"
+    r"(?P<sym_pre>[€$£¥]|EUR|USD|GBP|CAD|AUD)\s*(?P<val_pre>\d+(?:[.,]\d{2})?)"
+    r"|"
+    r"(?P<val_post>\d+(?:[.,]\d{2})?)\s*(?P<sym_post>[€$£¥]|EUR|USD|GBP|CAD|AUD)"
+    r")"
+)
+_OFFSCREEN_PRICE_RE = re.compile(r'<span class="a-offscreen">([^<]+)</span>', re.I)
+
+
+def _tile_asin(href: str, fragment: str) -> str | None:
+    """Extract 10-character Amazon ASIN from link href or tile markup."""
+    query = {k.lower(): v for k, v in parse_qs(urlparse(href).query).items()}
+    if query_asin := (query.get("asin") or [""])[0]:
+        if len(query_asin) == 10 and query_asin.isalnum():
+            return query_asin
+    if m := _ASIN_PATH_RE.search(href):
+        return m.group(1)
+    if m := _ASIN_PATH_RE.search(fragment):
+        return m.group(1)
+    if m := _ASIN_PARAM_RE.search(fragment):
+        return m.group(1)
+    return None
+
+
+def _tile_price(fragment: str) -> tuple[float | None, str | None]:
+    """Extract item or order price and currency code from tile markup."""
+    if not fragment:
+        return None, None
+    token = None
+    if m := _OFFSCREEN_PRICE_RE.search(fragment):
+        token = m.group(1)
+    elif m := _PRICE_TOKEN_RE.search(fragment):
+        token = m.group(0)
+    if not token:
+        return None, None
+    m_price = _PRICE_TOKEN_RE.search(token)
+    if not m_price:
+        return None, None
+    raw_val = m_price.group("val_pre") or m_price.group("val_post")
+    raw_sym = m_price.group("sym_pre") or m_price.group("sym_post")
+    if not raw_val:
+        return None, None
+    try:
+        val = float(raw_val.replace(",", "."))
+    except ValueError:
+        return None, None
+    currency = _CURRENCY_SYMBOLS.get(raw_sym, raw_sym) if raw_sym else None
+    return val, currency
+
+
 def _tile_image(fragment: str) -> str | None:
     """Return the product thumbnail of one order line, the larger one if offered."""
     tag = _TILE_IMAGE_RE.search(fragment)
@@ -288,6 +361,9 @@ def parse_order_tiles(page: str, today: date) -> list[OrderTile]:
             ) or _relative_day(status_text, today)
             if delivered_on is None:
                 _warn_undated(status_text)
+        fragment = page[match.end() : tile_end]
+        asin = _tile_asin(href, fragment)
+        price_val, price_cur = _tile_price(fragment)
         tiles.append(
             OrderTile(
                 order_id=order_id,
@@ -301,7 +377,10 @@ def parse_order_tiles(page: str, today: date) -> list[OrderTile]:
                 placed_on=placed_on,
                 delivered_on=delivered_on,
                 position=position,
-                image_url=_tile_image(page[match.end() : tile_end]),
+                image_url=_tile_image(fragment),
+                asin=asin,
+                item_price=price_val,
+                item_price_currency=price_cur,
             )
         )
     return tiles
@@ -417,6 +496,8 @@ def parse_business_cards(fragment: str, today: date) -> list[OrderTile]:
             )
             if delivered_on is None:
                 _warn_undated(status_text)
+        asin = _tile_asin(href, body)
+        price_val, price_cur = _tile_price(body)
         tiles.append(
             OrderTile(
                 order_id=order_id,
@@ -431,6 +512,9 @@ def parse_business_cards(fragment: str, today: date) -> list[OrderTile]:
                 delivered_on=delivered_on,
                 position=position,
                 follow=is_track_page_path(href),
+                asin=asin,
+                item_price=price_val,
+                item_price_currency=price_cur,
             )
         )
     return tiles
@@ -786,6 +870,34 @@ def build_record(
     window = (
         delivery_window(track.state, read_at) if track and read_at else None
     ) or _arrival_window(lead.status_text, track, read_at)
+
+    def _format_item_url(tile: OrderTile) -> str | None:
+        if tile.item_url:
+            return tile.item_url
+        if tile.asin:
+            base_domain = domain if domain.startswith("amazon.") else f"amazon.{domain}"
+            return f"https://www.{base_domain}/dp/{tile.asin}"
+        return None
+
+    items = []
+    for tile in tiles:
+        item_price = tile.item_price
+        item_price_currency = tile.item_price_currency
+        if item_price is None and len(tiles) == 1 and lead.status_note:
+            p_val, p_cur = _tile_price(lead.status_note)
+            if p_val is not None:
+                item_price = p_val
+                item_price_currency = p_cur
+        items.append(
+            {
+                "title": tile.title,
+                "image_url": tile.image_url,
+                "item_url": _format_item_url(tile),
+                "item_price": item_price,
+                "item_price_currency": item_price_currency,
+            }
+        )
+
     return {
         "domain": domain,
         "order_id": lead.order_id,
@@ -804,7 +916,7 @@ def build_record(
         "milestone": progress.get("lastReachedMilestone") if progress else None,
         "delivery_window": list(window) if window else None,
         "events": track.events if track else [],
-        "items": [{"title": tile.title, "image_url": tile.image_url} for tile in tiles],
+        "items": items,
         "pop_path": lead.pop_path,
         "track_path": track_path,
         "page_state": track.state if track else {},

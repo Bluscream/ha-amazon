@@ -413,8 +413,20 @@ async def test_order_lines_of_one_shipment_cost_one_read():
     (record,) = await _client(session).async_get_parcels()
 
     assert record["items"] == [
-        {"title": "Example Widget, Blue", "image_url": None},
-        {"title": "Second item", "image_url": None},
+        {
+            "title": "Example Widget, Blue",
+            "image_url": None,
+            "item_url": f"https://www.{COUNTRY}/dp/B000TEST00",
+            "item_price": None,
+            "item_price_currency": None,
+        },
+        {
+            "title": "Second item",
+            "image_url": None,
+            "item_url": f"https://www.{COUNTRY}/dp/B000TEST00",
+            "item_price": None,
+            "item_price_currency": None,
+        },
     ]
     assert sum("pop?" in url for url in _gets(session)) == 1
 

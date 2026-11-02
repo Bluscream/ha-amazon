@@ -39,6 +39,8 @@ def tile(
     placed_anchor: str = "Order placed",
     href: str | None = None,
     image: str | None = None,
+    asin: str | None = "B000TEST00",
+    price: str | None = None,
 ) -> str:
     """One order line, labelled the way the page labels it.
 
@@ -47,6 +49,7 @@ def tile(
     """
     tail = f", {status}" + (f", {note}" if note else "") if status else ""
     label = escape(f"{title}, {placed_anchor} {placed}{tail}")
+    asin_part = f"&asin={asin}" if asin else ""
     href = href or (
         "/-/en/your-orders/pop?ref=ppx_test&orderId="
         + order_id
@@ -56,7 +59,7 @@ def tile(
         + shipment_id
         + "&packageId="
         + package_id
-        + "&asin=B000TEST00"
+        + asin_part
     )
     thumbnail = (
         '<div class="product-image aok-dm-img--rounded-sm">\n'
@@ -65,9 +68,14 @@ def tile(
         if image
         else ""
     )
+    price_tag = (
+        f'<span class="a-price"><span class="a-offscreen">{escape(price)}</span></span>'
+        if price
+        else ""
+    )
     return (
         f'<li><a class="item-card__link" href="{escape(href)}" '
-        f'aria-label="{label}"></a>{thumbnail}</li>'
+        f'aria-label="{label}"></a>{thumbnail}{price_tag}</li>'
     )
 
 
@@ -235,7 +243,15 @@ def delivered_record(code: str = DELIVERED_CODE) -> dict:
             ),
             event("2026-10-02T00:00:00+02:00", "Package left the courier facility"),
         ],
-        "items": [{"title": "Example Widget, Blue", "image_url": None}],
+        "items": [
+            {
+                "title": "Example Widget, Blue",
+                "image_url": None,
+                "item_url": f"https://www.{COUNTRY}/dp/B000TEST00",
+                "item_price": None,
+                "item_price_currency": None,
+            }
+        ],
         "pop_path": "/-/en/your-orders/pop?orderId=" + ORDER_ID,
         "track_path": track_path(DELIVERED_SHIPMENT),
         "page_state": {"customerId": FAKE_CUSTOMER},
@@ -289,7 +305,15 @@ def untracked_record() -> dict:
         "delivered_on": None,
         "milestone": None,
         "events": [],
-        "items": [{"title": "Example Widget, Blue", "image_url": None}],
+        "items": [
+            {
+                "title": "Example Widget, Blue",
+                "image_url": None,
+                "item_url": f"https://www.{COUNTRY}/dp/B000TEST00",
+                "item_price": None,
+                "item_price_currency": None,
+            }
+        ],
         "pop_path": "/-/en/your-orders/pop?orderId=" + ORDER_ID,
         "track_path": None,
         "page_state": {},

@@ -8,6 +8,8 @@ import pytest
 
 from custom_components.amazon_orders.account.pages import (
     _day_month,
+    _tile_asin,
+    _tile_price,
     build_record,
     business_card_count,
     business_cards_found,
@@ -344,8 +346,20 @@ def test_the_record_lists_each_item_with_its_image():
     )
     record = build_record(COUNTRY, tiles, None, None)
     assert record["items"] == [
-        {"title": "Example Widget, Blue", "image_url": f"{_IMAGE}._SS284_.jpg"},
-        {"title": "Two", "image_url": None},
+        {
+            "title": "Example Widget, Blue",
+            "image_url": f"{_IMAGE}._SS284_.jpg",
+            "item_url": f"https://www.{COUNTRY}/dp/B000TEST00",
+            "item_price": None,
+            "item_price_currency": None,
+        },
+        {
+            "title": "Two",
+            "image_url": None,
+            "item_url": f"https://www.{COUNTRY}/dp/B000TEST00",
+            "item_price": None,
+            "item_price_currency": None,
+        },
     ]
 
 
@@ -479,7 +493,15 @@ def test_record_with_a_tracking_page():
     assert record["delivered_on"] == "2026-10-03"
     assert record["order_status"] == "Delivered 3 October"
     assert record["track_path"] == path
-    assert record["items"] == [{"title": "Example Widget, Blue", "image_url": None}]
+    assert record["items"] == [
+        {
+            "title": "Example Widget, Blue",
+            "image_url": None,
+            "item_url": f"https://www.{COUNTRY}/dp/B000TEST00",
+            "item_price": None,
+            "item_price_currency": None,
+        }
+    ]
     assert len(record["events"]) == 4
     assert record["delivery_photo_url"] is None
 
@@ -1179,3 +1201,61 @@ def test_an_arriving_line_gives_a_whole_day_window():
     parcel = normalize_parcel(record)
     assert parcel["planned_from"] == "2026-10-26T00:00:00+01:00"
     assert parcel["planned_to"] == "2026-10-26T23:59:59+01:00"
+
+
+def test_tile_asin_extraction():
+    # From query param
+    assert _tile_asin("/pop?asin=B0BX76TDK2", "") == "B0BX76TDK2"
+    # From path
+    assert _tile_asin("/dp/B0BX76TDK2", "") == "B0BX76TDK2"
+    assert _tile_asin("/gp/product/B0BX76TDK2", "") == "B0BX76TDK2"
+    # From markup fragment
+    assert (
+        _tile_asin(
+            "/pop?orderId=1",
+            '<div class="product-title"><a href="/dp/B0CL7LBWH3?ref=title">Title</a></div>',
+        )
+        == "B0CL7LBWH3"
+    )
+    assert _tile_asin("/pop?orderId=1", "<span>No asin here</span>") is None
+
+
+def test_tile_price_extraction():
+    # Offscreen price tag
+    assert _tile_price('<span class="a-offscreen">€24.99</span>') == (24.99, "EUR")
+    assert _tile_price('<span class="a-offscreen">19,99 €</span>') == (19.99, "EUR")
+    assert _tile_price('<span class="a-offscreen">$14.50</span>') == (14.50, "USD")
+    assert _tile_price('<span class="a-offscreen">£29.99</span>') == (29.99, "GBP")
+    assert _tile_price('<span class="a-offscreen">24.99 EUR</span>') == (24.99, "EUR")
+    # Inline text fallback
+    assert _tile_price("Total: €26.51") == (26.51, "EUR")
+    assert _tile_price("No price") == (None, None)
+
+
+def test_build_record_includes_complete_item_metadata():
+    tiles = parse_order_tiles(
+        orders_page(
+            tile(
+                ACTIVE_SHIPMENT,
+                "Arriving today",
+                None,
+                title="Boykisser Thigh High Socks × 2",
+                asin="B0BX76TDK2",
+                price="€24.99",
+                image="https://m.media-amazon.com/images/I/socks",
+            )
+        ),
+        TODAY,
+    )
+    record = build_record("amazon.de", tiles, None, None)
+    assert record["items"] == [
+        {
+            "title": "Boykisser Thigh High Socks × 2",
+            "image_url": "https://m.media-amazon.com/images/I/socks._SS284_.jpg",
+            "item_url": "https://www.amazon.de/dp/B0BX76TDK2",
+            "item_price": 24.99,
+            "item_price_currency": "EUR",
+        }
+    ]
+    parcel = normalize_parcel(record)
+    assert parcel["items"] == record["items"]
