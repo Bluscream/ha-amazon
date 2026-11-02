@@ -200,6 +200,17 @@ class AmazonParcelSensor(CoordinatorEntity[AmazonCoordinator], SensorEntity):
             # Invalidate cached name and friendly_name if calculated
             self.__dict__.pop("name", None)
             self._cached_friendly_name = None
+            if self.hass and self.registry_entry:
+                registry = er.async_get(self.hass)
+                expected_original_name = self.name
+                if (
+                    expected_original_name
+                    and expected_original_name != self.registry_entry.original_name
+                ):
+                    self.registry_entry = registry.async_update_entity(
+                        self.entity_id,
+                        original_name=expected_original_name,
+                    )
 
     def _handle_coordinator_update(self) -> None:
         self._update_placeholders()
