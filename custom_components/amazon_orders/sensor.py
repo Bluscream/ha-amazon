@@ -171,6 +171,7 @@ class AmazonParcelSensor(CoordinatorEntity[AmazonCoordinator], SensorEntity):
         self._attr_unique_id = f"{entry.entry_id}_{barcode}"
         self._attr_translation_placeholders = {"barcode": barcode}
         self._attr_device_info = build_device_info(entry)
+        self._update_placeholders()
 
     def _get_parcel(self) -> dict[str, Any] | None:
         for parcel in self.coordinator.data or []:
@@ -178,9 +179,7 @@ class AmazonParcelSensor(CoordinatorEntity[AmazonCoordinator], SensorEntity):
                 return parcel
         return None
 
-    @property
-    def translation_placeholders(self) -> dict[str, str]:
-        """Return the translation placeholders, dynamically incorporating item summary if available."""
+    def _update_placeholders(self) -> None:
         parcel = self._get_parcel()
         items = (parcel.get("raw") or {}).get("items") if parcel else None
         if items and isinstance(items, list):
@@ -190,8 +189,21 @@ class AmazonParcelSensor(CoordinatorEntity[AmazonCoordinator], SensorEntity):
                 if len(clean) > 32:
                     clean = clean[:32].rstrip() + "…"
                 shortened.append(f'"{clean}"')
-            return {"barcode": f"{self._barcode} ({', '.join(shortened)})"}
-        return {"barcode": self._barcode}
+            new_placeholders = {
+                "barcode": f"{self._barcode} ({', '.join(shortened)})"
+            }
+        else:
+            new_placeholders = {"barcode": self._barcode}
+
+        if getattr(self, "_attr_translation_placeholders", None) != new_placeholders:
+            self._attr_translation_placeholders = new_placeholders
+            # Invalidate cached name and friendly_name if calculated
+            self.__dict__.pop("name", None)
+            self._cached_friendly_name = None
+
+    def _handle_coordinator_update(self) -> None:
+        self._update_placeholders()
+        super()._handle_coordinator_update()
 
     @property
     def native_value(self) -> str | None:
