@@ -1206,9 +1206,11 @@ def test_an_arriving_line_gives_a_whole_day_window():
 def test_tile_asin_extraction():
     # From query param
     assert _tile_asin("/pop?asin=B0BX76TDK2", "") == "B0BX76TDK2"
-    # From path
+    # From path (desktop and mobile)
     assert _tile_asin("/dp/B0BX76TDK2", "") == "B0BX76TDK2"
     assert _tile_asin("/gp/product/B0BX76TDK2", "") == "B0BX76TDK2"
+    assert _tile_asin("/-/en/gp/aw/d/B004URLZMG?ref=ppx_pt2_mob_b_prod_image", "") == "B004URLZMG"
+    assert _tile_asin("/gp/aw/d/B004URLZMG", "") == "B004URLZMG"
     # From markup fragment
     assert (
         _tile_asin(
@@ -1255,6 +1257,64 @@ def test_build_record_includes_complete_item_metadata():
             "item_url": "https://www.amazon.de/dp/B0BX76TDK2",
             "item_price": 24.99,
             "item_price_currency": "EUR",
+        }
+    ]
+    parcel = normalize_parcel(record)
+    assert parcel["items"] == record["items"]
+
+
+def test_track_page_carousel_item_extraction():
+    carousel_html = (
+        '<div id="promise-card-asin-image-carousel">'
+        '<ol class="a-carousel" role="list">'
+        '<li aria-roledescription="slide" class="a-carousel-card">'
+        '<a class="a-link-normal image-wrapper" href="/-/en/gp/aw/d/B004URLZMG?ref=test">'
+        '<img alt="Gogo Hotpants with chain" data-src="https://m.media-amazon.com/images/I/gogo.jpg" src="grey.gif"/>'
+        '</a>'
+        '</li>'
+        '</ol>'
+        '</div>'
+        '</section>'
+    )
+    track = parse_track_page(f"<html><body>{carousel_html}</body></html>", TODAY)
+    assert len(track.items) == 1
+    assert track.items[0]["asin"] == "B004URLZMG"
+    assert track.items[0]["title"] == "Gogo Hotpants with chain"
+    assert track.items[0]["image_url"] == "https://m.media-amazon.com/images/I/gogo.jpg"
+
+
+def test_build_record_active_order_uses_track_carousel_asins():
+    # Simulate an active order tile linking to /progress-tracker/package with no asin param
+    tile_html = (
+        '<li><a class="item-card__link" '
+        'href="/progress-tracker/package?orderId=305-2111483-4533957&shipmentId=D5hWnQCw3" '
+        'aria-label="Gogo Hotpants with chain leather look 8-12, Order placed 2 November 2026, Arriving Saturday"></a>'
+        '<div class="product-image"><img src="https://m.media-amazon.com/images/I/thumb.jpg"></div></li>'
+    )
+    tiles = parse_order_tiles(orders_page(tile_html), TODAY)
+    assert tiles[0].asin is None
+
+    carousel_html = (
+        '<div id="promise-card-asin-image-carousel">'
+        '<ol class="a-carousel" role="list">'
+        '<li class="a-carousel-card">'
+        '<a href="/-/en/gp/aw/d/B004URLZMG?ref=test">'
+        '<img alt="Gogo Hotpants with chain leather look 8-12" data-src="https://m.media-amazon.com/images/I/hires.jpg"/>'
+        '</a>'
+        '</li>'
+        '</ol>'
+        '</div></section>'
+    )
+    track = parse_track_page(f"<html><body>{carousel_html}</body></html>", TODAY)
+
+    record = build_record("amazon.de", tiles, "/progress-tracker/package", track)
+    assert record["items"] == [
+        {
+            "title": "Gogo Hotpants with chain leather look 8-12",
+            "image_url": "https://m.media-amazon.com/images/I/thumb.jpg",
+            "item_url": "https://www.amazon.de/dp/B004URLZMG",
+            "item_price": None,
+            "item_price_currency": None,
         }
     ]
     parcel = normalize_parcel(record)

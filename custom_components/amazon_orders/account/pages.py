@@ -199,6 +199,7 @@ class TrackInfo:
     state: dict[str, Any] = field(default_factory=dict)
     delivery_photo_url: str | None = None
     delivery_photo_expires: str | None = None
+    items: list[dict[str, Any]] = field(default_factory=list)
 
 
 def looks_signed_out(page: str) -> bool:
@@ -233,7 +234,7 @@ def _day_month(text: str, reference: date, *, forward: bool = False) -> date | N
     return found
 
 
-_ASIN_PATH_RE = re.compile(r"/(?:dp|gp/product)/([A-Za-z0-9]{10})", re.I)
+_ASIN_PATH_RE = re.compile(r"/(?:dp|gp/product|gp/aw/d)/([A-Za-z0-9]{10})", re.I)
 _ASIN_PARAM_RE = re.compile(r"[?&]asin=([A-Za-z0-9]{10})\b", re.I)
 
 _CURRENCY_SYMBOLS: dict[str, str] = {
@@ -766,6 +767,48 @@ def delivery_photo_expiry(url: str | None) -> str | None:
     return expiry.isoformat()
 
 
+_CAROUSEL_RE = re.compile(
+    r'id="promise-card-asin-image-carousel"[^>]*>(.*?)</section>', re.S
+)
+_SLIDE_RE = re.compile(
+    r'<li[^>]*class="[^"]*a-carousel-card[^"]*"[^>]*>(.*?)</li>', re.S
+)
+_HREF_ATTR_RE = re.compile(r'href="([^"]+)"')
+_ALT_ATTR_RE = re.compile(r'alt="([^"]*)"')
+_DATA_SRC_ATTR_RE = re.compile(r'data-src="([^"]+)"')
+_SRC_ATTR_RE = re.compile(r'src="([^"]+)"')
+
+
+def _parse_track_items(page: str) -> list[dict[str, Any]]:
+    """Extract item ASIN, title and image from the tracking promise card carousel."""
+    m_carousel = _CAROUSEL_RE.search(page)
+    if not m_carousel:
+        return []
+    items: list[dict[str, Any]] = []
+    for slide in _SLIDE_RE.findall(m_carousel.group(1)):
+        m_href = _HREF_ATTR_RE.search(slide)
+        href = m_href.group(1) if m_href else ""
+        asin = _tile_asin(href, slide)
+        m_alt = _ALT_ATTR_RE.search(slide)
+        title = html.unescape(m_alt.group(1)) if m_alt else None
+        m_data = _DATA_SRC_ATTR_RE.search(slide)
+        m_src = _SRC_ATTR_RE.search(slide)
+        img = None
+        if m_data:
+            img = html.unescape(m_data.group(1))
+        elif m_src and not m_src.group(1).startswith("data:"):
+            img = html.unescape(m_src.group(1))
+        items.append(
+            {
+                "asin": asin,
+                "title": title,
+                "image_url": img,
+                "href": href,
+            }
+        )
+    return items
+
+
 def parse_track_page(page: str, today: date) -> TrackInfo:
     """Parse a ship-track page into carrier, tracking id, state and timeline."""
     state = _page_state(page)
@@ -780,6 +823,7 @@ def parse_track_page(page: str, today: date) -> TrackInfo:
     if not isinstance(page_zone, str):
         page_zone = None
     photo = parse_delivery_photo(page)
+    track_items = _parse_track_items(page)
     return TrackInfo(
         tracking_id=str(tracking_id) if tracking_id else None,
         carrier_code=_CARRIER_ALIASES.get(carrier.group(1), carrier.group(1))
@@ -791,6 +835,7 @@ def parse_track_page(page: str, today: date) -> TrackInfo:
         state=state,
         delivery_photo_url=photo,
         delivery_photo_expires=delivery_photo_expiry(photo),
+        items=track_items,
     )
 
 
@@ -871,16 +916,28 @@ def build_record(
         delivery_window(track.state, read_at) if track and read_at else None
     ) or _arrival_window(lead.status_text, track, read_at)
 
-    def _format_item_url(tile: OrderTile) -> str | None:
-        if tile.item_url:
-            return tile.item_url
-        if tile.asin:
-            base_domain = domain if domain.startswith("amazon.") else f"amazon.{domain}"
-            return f"https://www.{base_domain}/dp/{tile.asin}"
-        return None
-
     items = []
-    for tile in tiles:
+    track_items = track.items if track else []
+    for idx, tile in enumerate(tiles):
+        asin = tile.asin
+        if not asin and track_items:
+            if idx < len(track_items) and track_items[idx].get("asin"):
+                asin = track_items[idx]["asin"]
+            elif len(track_items) == 1 and track_items[0].get("asin"):
+                asin = track_items[0]["asin"]
+
+        item_url = tile.item_url
+        if not item_url and asin:
+            base_domain = domain if domain.startswith("amazon.") else f"amazon.{domain}"
+            item_url = f"https://www.{base_domain}/dp/{asin}"
+
+        image_url = tile.image_url
+        if not image_url and track_items:
+            if idx < len(track_items) and track_items[idx].get("image_url"):
+                image_url = track_items[idx]["image_url"]
+            elif len(track_items) == 1 and track_items[0].get("image_url"):
+                image_url = track_items[0]["image_url"]
+
         item_price = tile.item_price
         item_price_currency = tile.item_price_currency
         if item_price is None and len(tiles) == 1 and lead.status_note:
@@ -888,11 +945,12 @@ def build_record(
             if p_val is not None:
                 item_price = p_val
                 item_price_currency = p_cur
+
         items.append(
             {
                 "title": tile.title,
-                "image_url": tile.image_url,
-                "item_url": _format_item_url(tile),
+                "image_url": image_url,
+                "item_url": item_url,
                 "item_price": item_price,
                 "item_price_currency": item_price_currency,
             }
