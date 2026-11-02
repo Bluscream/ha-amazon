@@ -179,6 +179,21 @@ class AmazonParcelSensor(CoordinatorEntity[AmazonCoordinator], SensorEntity):
         return None
 
     @property
+    def translation_placeholders(self) -> dict[str, str]:
+        """Return the translation placeholders, dynamically incorporating item summary if available."""
+        parcel = self._get_parcel()
+        items = (parcel.get("raw") or {}).get("items") if parcel else None
+        if items and isinstance(items, list):
+            shortened = []
+            for item in items:
+                clean = str(item).strip()
+                if len(clean) > 32:
+                    clean = clean[:32].rstrip() + "…"
+                shortened.append(f'"{clean}"')
+            return {"barcode": f"{self._barcode} ({', '.join(shortened)})"}
+        return {"barcode": self._barcode}
+
+    @property
     def native_value(self) -> str | None:
         """Return the native value of the sensor."""
         parcel = self._get_parcel()

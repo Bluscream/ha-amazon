@@ -33,6 +33,7 @@ def _parcel(
     status: ParcelStatus = ParcelStatus.IN_TRANSIT,
     pickup: bool = False,
     planned_from: str | None = None,
+    raw: dict | None = None,
 ) -> dict:
     return {
         "carrier": "Amazon",
@@ -42,6 +43,7 @@ def _parcel(
         "status": status,
         "pickup": pickup,
         "planned_from": planned_from,
+        "raw": raw or {},
     }
 
 
@@ -53,10 +55,17 @@ def test_incoming_counts_and_lists():
 
 
 def test_parcel_sensor_status_and_attributes():
-    parcel = _parcel("A", status=ParcelStatus.OUT_FOR_DELIVERY)
+    parcel = _parcel(
+        "A",
+        status=ParcelStatus.OUT_FOR_DELIVERY,
+        raw={"items": ["First Item That Is Quite Long And Will Be Truncated", "Second Item"]},
+    )
     sensor = AmazonParcelSensor(_coordinator([parcel]), _entry(), "A")
     assert sensor.native_value == ParcelStatus.OUT_FOR_DELIVERY
     assert sensor.extra_state_attributes["barcode"] == "A"
+    assert sensor.translation_placeholders == {
+        "barcode": 'A ("First Item That Is Quite Long An…", "Second Item")'
+    }
 
 
 def test_parcel_sensor_missing_barcode():
