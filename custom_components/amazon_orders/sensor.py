@@ -285,6 +285,11 @@ class AmazonParcelSensor(CoordinatorEntity[AmazonCoordinator], SensorEntity):
                         original_name=expected_original_name,
                     )
 
+    async def async_added_to_hass(self) -> None:
+        """Sync dynamic item names into registry when added to hass."""
+        await super().async_added_to_hass()
+        self._update_placeholders()
+
     def _handle_coordinator_update(self) -> None:
         self._update_placeholders()
         super()._handle_coordinator_update()
