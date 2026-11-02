@@ -35,6 +35,10 @@ type AmazonConfigEntry = ConfigEntry[AmazonData]
 
 async def async_setup_entry(hass: HomeAssistant, entry: AmazonConfigEntry) -> bool:
     """Set up Amazon from a config entry."""
+    import importlib
+    from .account import pages
+    importlib.reload(pages)
+
     # Each config entry needs its own cookie jar, or two storefronts overwrite
     # each other's cookies in the shared session. The connector is reused
     # (connector_owner=False) so this stays cheap.
