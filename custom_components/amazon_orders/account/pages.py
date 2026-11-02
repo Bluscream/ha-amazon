@@ -80,6 +80,10 @@ _POD_IMG_RE = re.compile(r"<img\b[^>]*>", re.S)
 _POD_SIGNED_AT = "X-Amz-Date"
 _POD_VALID_FOR = "X-Amz-Expires"
 _POD_SRC_RE = re.compile(r'\b(data-src|src)="([^"]+)"')
+_ITEM_IMAGE_RE = re.compile(
+    r'<img\b[^>]*\b(?:src|data-src)="([^"]*media-amazon\.com/images/I/[^"]+)"[^>]*>',
+    re.I,
+)
 
 # "14:00 - 16:30" in the promise message, with the countdown to its end.
 _WINDOW_RE = re.compile(
@@ -188,6 +192,7 @@ class TrackInfo:
     state: dict[str, Any] = field(default_factory=dict)
     delivery_photo_url: str | None = None
     delivery_photo_expires: str | None = None
+    item_image_url: str | None = None
 
 
 def looks_signed_out(page: str) -> bool:
@@ -671,6 +676,8 @@ def parse_track_page(page: str, today: date) -> TrackInfo:
     if not isinstance(page_zone, str):
         page_zone = None
     photo = parse_delivery_photo(page)
+    img_match = _ITEM_IMAGE_RE.search(page)
+    item_image = html.unescape(img_match.group(1).strip()) if img_match else None
     return TrackInfo(
         tracking_id=str(tracking_id) if tracking_id else None,
         carrier_code=_CARRIER_ALIASES.get(carrier.group(1), carrier.group(1))
@@ -682,6 +689,7 @@ def parse_track_page(page: str, today: date) -> TrackInfo:
         state=state,
         delivery_photo_url=photo,
         delivery_photo_expires=delivery_photo_expiry(photo),
+        item_image_url=item_image,
     )
 
 
@@ -780,6 +788,7 @@ def build_record(
         "delivery_window": list(window) if window else None,
         "events": track.events if track else [],
         "items": [tile.title for tile in tiles],
+        "image_url": track.item_image_url if track else None,
         "pop_path": lead.pop_path,
         "track_path": track_path,
         "page_state": track.state if track else {},

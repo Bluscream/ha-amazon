@@ -289,6 +289,17 @@ def test_delivery_photo_falls_back_to_the_noscript_image():
     assert parse_delivery_photo(page) == _PHOTO_PLAIN
 
 
+def test_track_page_extracts_item_image():
+    img_url = "https://m.media-amazon.com/images/I/31J0gqo-WfL._SCLZZZZZZZ__SY300_SX300_.jpg"
+    page = (
+        '<html><body><div class="item-image-wrapper">'
+        f'<img alt="Product" src="{img_url}"/>'
+        '</div></body></html>'
+    )
+    info = parse_track_page(page, TODAY)
+    assert info.item_image_url == img_url
+
+
 def test_tracking_id_tolerates_the_dutch_label():
     page = track_page(state=False).replace("Tracking ID:", "Tracking-id:")
     assert parse_track_page(page, TODAY).tracking_id == ACTIVE_CODE

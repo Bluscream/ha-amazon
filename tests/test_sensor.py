@@ -58,10 +58,14 @@ def test_parcel_sensor_status_and_attributes():
     parcel = _parcel(
         "A",
         status=ParcelStatus.OUT_FOR_DELIVERY,
-        raw={"items": ["First Item That Is Quite Long And Will Be Truncated", "Second Item"]},
+        raw={
+            "items": ["First Item That Is Quite Long And Will Be Truncated", "Second Item"],
+            "image_url": "https://m.media-amazon.com/images/I/sample.jpg",
+        },
     )
     sensor = AmazonParcelSensor(_coordinator([parcel]), _entry(), "A")
     assert sensor.native_value == ParcelStatus.OUT_FOR_DELIVERY
+    assert sensor.entity_picture == "https://m.media-amazon.com/images/I/sample.jpg"
     assert sensor.extra_state_attributes["barcode"] == "A"
     assert sensor.translation_placeholders == {
         "barcode": 'A ("First Item That Is Quite Long An…", "Second Item")'

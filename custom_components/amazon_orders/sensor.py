@@ -200,6 +200,19 @@ class AmazonParcelSensor(CoordinatorEntity[AmazonCoordinator], SensorEntity):
         return parcel.get("status") if parcel else None
 
     @property
+    def entity_picture(self) -> str | None:
+        """Return the product image URL, or delivery photo if delivered."""
+        parcel = self._get_parcel()
+        if not parcel:
+            return None
+        raw = parcel.get("raw") or {}
+        return (
+            raw.get("image_url")
+            or raw.get("delivery_photo_url")
+            or parcel.get("delivery_photo_url")
+        )
+
+    @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the extra state attributes."""
         parcel = self._get_parcel()
