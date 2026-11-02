@@ -1080,6 +1080,7 @@ def test_business_list_count_and_error_flag():
 # whole-day window from an "Arriving ..." order line
 # ---------------------------------------------------------------------------
 
+
 def test_a_timed_arriving_line_gives_that_window():
     zone = ZoneInfo("Europe/Berlin")
     read_at = datetime(2026, 11, 2, 11, 0, tzinfo=zone)

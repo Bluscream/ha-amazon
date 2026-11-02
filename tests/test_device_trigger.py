@@ -10,7 +10,7 @@ from custom_components.amazon_orders.device_trigger import (
 )
 
 
-async def test_get_triggers_returns_all_four(hass):
+async def test_get_triggers_returns_every_type(hass):
     triggers = await async_get_triggers(hass, "device123")
     types = {t["type"] for t in triggers}
     assert types == {
@@ -18,6 +18,7 @@ async def test_get_triggers_returns_all_four(hass):
         "parcel_status_changed",
         "parcel_delivered",
         "parcel_delivery_time_changed",
+        "parcel_live_updated",
     }
     for trigger in triggers:
         assert trigger["domain"] == DOMAIN

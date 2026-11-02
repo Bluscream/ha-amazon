@@ -384,6 +384,7 @@ CANONICAL_KEYS = [
     "weight",
     "dimensions",
     "history",
+    "live",  # parcel-live/1
     "raw",
 ]
 

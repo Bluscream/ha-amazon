@@ -74,6 +74,15 @@
             "data_description": {
               "hand_off": "Przesyłki przewoźników bez skonfigurowanej integracji zostają tutaj."
             }
+          },
+          "live": {
+            "name": "Mapa kuriera na żywo",
+            "data": {
+              "live_tracking": "Śledź kuriera, gdy paczka jest w doręczeniu"
+            },
+            "data_description": {
+              "live_tracking": "Gdy własny kurier Amazona doręcza paczkę, odczytuje, gdzie jest kurier i ile przystanków zostało, tak jak strona śledzenia: mniej więcej raz na minutę, gdy jest widoczny, wcześniej co pięć minut."
+            }
           }
         }
       }
@@ -92,7 +101,8 @@
       "parcel_registered": "Przesyłka została zarejestrowana",
       "parcel_status_changed": "Status paczki się zmienił",
       "parcel_delivered": "Przesyłka została doręczona",
-      "parcel_delivery_time_changed": "Przewidywany czas dostawy paczki się zmienił"
+      "parcel_delivery_time_changed": "Przewidywany czas dostawy paczki się zmienił",
+      "parcel_live_updated": "Kurier paczki się zbliżył albo jego doręczenie na żywo się rozpoczęło lub zakończyło"
     }
   },
   "entity": {
@@ -131,6 +141,9 @@
       },
       "parcel": {
         "name": "Przesyłka {barcode}"
+      },
+      "courier_stops_away": {
+        "name": "Przystanki kuriera"
       }
     }
   },

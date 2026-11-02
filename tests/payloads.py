@@ -110,9 +110,15 @@ def track_page(
     timezone: str | None = "Europe/Amsterdam",
     state: bool = True,
     delivery_photo: str | None = None,
+    csrf_token: str | None = None,
+    shipment_id: str | None = None,
+    map_tracking: dict | None = None,
 ) -> str:
     """A ship-track page. ``events`` are ``(date, time, message, location)``."""
     parts = ["<html><body>"]
+    if csrf_token:
+        # As the real page hands its own scripts the token.
+        parts.append(f"<script>\n     window.csrfToken = '{csrf_token}';\n</script>")
     if carrier_header is None and carrier:
         carrier_header = f"Delivery By {carrier}"
     if carrier_header:
@@ -162,6 +168,10 @@ def track_page(
             payload["shortStatus"] = short_status
         if tracking_id:
             payload["trackingId"] = tracking_id
+        if shipment_id:
+            payload["shipmentId"] = shipment_id
+        if map_tracking is not None:
+            payload["mapTracking"] = map_tracking
         parts.append(
             '<script type="a-state" data-a-state="{&quot;key&quot;:&quot;page-state&quot;}">'
             + json.dumps(payload)
@@ -346,3 +356,51 @@ def business_history(
         + "".join(cards)
         + "</div>"
     )
+
+
+# ---------------------------------------------------------------------------
+# courier map (parcel-live/1); every coordinate is invented, in open water
+# ---------------------------------------------------------------------------
+
+FAKE_CSRF = "fakeCsrfToken0123456789abcdef"
+LIVE_SHIPMENT_ID = "fakeShipment0001"
+# 2026-11-02T17:00:00Z; points are a minute apart from there.
+LIVE_EPOCH_MS = 1793638800000
+
+
+def live_point(minute: int, latitude: float = 54.5, longitude: float = 3.5) -> dict:
+    """One courier position, as the location endpoint lists them."""
+    return {
+        "latitude": latitude + minute / 1000,
+        "longitude": longitude + minute / 1000,
+        "accuracy": 8.0,
+        "epochTimestamp": LIVE_EPOCH_MS + minute * 60_000,
+    }
+
+
+def location_state(
+    *points: dict,
+    status: str | None = "OUT_FOR_DELIVERY",
+    callout: str | None = "4 stops away",
+    success: bool = True,
+    **map_state,
+) -> dict:
+    """An answer of the location endpoint."""
+    if not success:
+        return {
+            "success": False,
+            "responseCode": map_state.get("code", "SERVICE_FAILED"),
+        }
+    state: dict = {**map_state}
+    if status is not None:
+        state["status"] = status
+    if callout is not None:
+        state["calloutMessage"] = callout
+    return {
+        "success": True,
+        "value": {
+            "packageLocationTimeline": list(points),
+            "currentEpoch": LIVE_EPOCH_MS,
+            "mapState": state,
+        },
+    }

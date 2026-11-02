@@ -38,6 +38,11 @@ TO_REDACT = {
     "location",
     # a photo of the user's own front door
     "delivery_photo_url",
+    # the courier's path ends at the user's door (parcel-live/1)
+    "latitude",
+    "longitude",
+    "accuracy",
+    "trail",
 }
 
 
@@ -65,6 +70,10 @@ async def async_get_config_entry_diagnostics(
             ),
             "suspended": coordinator.update_interval is None,
         },
+        # States only: how many couriers are followed and where each session is.
+        "live": sorted(
+            live["state"] for live in entry.runtime_data.live.readings.values()
+        ),
         "incoming": async_redact_data(coordinator.data or [], TO_REDACT),
         "delivered": async_redact_data(coordinator.delivered or [], TO_REDACT),
     }

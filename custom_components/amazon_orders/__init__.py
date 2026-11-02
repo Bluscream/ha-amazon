@@ -15,6 +15,7 @@ from .account.client import AmazonClient
 from .account.coordinator import AmazonCoordinator, business_lines_store
 from .const import CONF_COUNTRY, CONF_REFRESH_TOKEN, DOMAIN, PLATFORMS
 from .handoff import HandOff, async_clear_issues
+from .live_tracker import LiveTracker
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class AmazonData:
     client: AmazonClient
     coordinator: AmazonCoordinator
     session: aiohttp.ClientSession
+    live: LiveTracker
 
 
 type AmazonConfigEntry = ConfigEntry[AmazonData]
@@ -45,6 +47,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: AmazonConfigEntry) -> bo
         entry.data[CONF_COUNTRY], entry.data[CONF_REFRESH_TOKEN], session
     )
     coordinator = AmazonCoordinator(hass, client, entry)
+    # Attached before the first refresh, so the first poll already arms it.
+    live = coordinator.live = LiveTracker(hass, entry, client, coordinator)
+    entry.async_on_unload(live.async_stop)
 
     try:
         # Fetch initial data here, before forwarding to platforms. Raising
@@ -60,7 +65,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: AmazonConfigEntry) -> bo
         raise
 
     entry.runtime_data = AmazonData(
-        client=client, coordinator=coordinator, session=session
+        client=client, coordinator=coordinator, session=session, live=live
     )
 
     try:

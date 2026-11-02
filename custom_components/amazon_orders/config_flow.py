@@ -38,12 +38,14 @@ from .const import (
     CONF_HAND_OFF,
     CONF_INCLUDE_HISTORY,
     CONF_LANDING_URL,
+    CONF_LIVE_TRACKING,
     CONF_REFRESH_TOKEN,
     COUNTRY_DOMAINS,
     DEFAULT_DELIVERED_FILTER_AMOUNT,
     DEFAULT_DELIVERED_FILTER_TYPE,
     DEFAULT_HAND_OFF,
     DEFAULT_INCLUDE_HISTORY,
+    DEFAULT_LIVE_TRACKING,
     DOMAIN,
 )
 
@@ -190,6 +192,7 @@ class AmazonConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_DELIVERED_FILTER_AMOUNT: DEFAULT_DELIVERED_FILTER_AMOUNT,
                     CONF_INCLUDE_HISTORY: DEFAULT_INCLUDE_HISTORY,
                     CONF_HAND_OFF: bool(user_input[CONF_HAND_OFF]),
+                    CONF_LIVE_TRACKING: DEFAULT_LIVE_TRACKING,
                 },
             )
         return self.async_show_form(step_id="hand_off", data_schema=_HAND_OFF_SCHEMA)
@@ -226,6 +229,7 @@ class AmazonOptionsFlowHandler(OptionsFlowWithReload):
             delivered = user_input["delivered"]
             history = user_input["history"]
             hand_off = user_input["hand_off"]
+            live = user_input["live"]
             # OptionsFlowWithReload reloads once the new options are saved; a
             # reload scheduled here would start before that, on the old ones.
             return self.async_create_entry(
@@ -237,6 +241,7 @@ class AmazonOptionsFlowHandler(OptionsFlowWithReload):
                     ),
                     CONF_INCLUDE_HISTORY: bool(history[CONF_INCLUDE_HISTORY]),
                     CONF_HAND_OFF: bool(hand_off[CONF_HAND_OFF]),
+                    CONF_LIVE_TRACKING: bool(live[CONF_LIVE_TRACKING]),
                 },
             )
 
@@ -300,6 +305,19 @@ class AmazonOptionsFlowHandler(OptionsFlowWithReload):
                         }
                     ),
                     {"collapsed": False},
+                ),
+                vol.Required("live"): section(
+                    vol.Schema(
+                        {
+                            vol.Required(
+                                CONF_LIVE_TRACKING,
+                                default=current.get(
+                                    CONF_LIVE_TRACKING, DEFAULT_LIVE_TRACKING
+                                ),
+                            ): selector.BooleanSelector(),
+                        }
+                    ),
+                    {"collapsed": True},
                 ),
             }
         )

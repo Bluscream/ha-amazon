@@ -8,7 +8,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -35,6 +35,9 @@ from ..handoff import HandOff
 from .client import AmazonClient
 from .errors import AmazonApiError, AmazonAuthError
 from .parcels import apply_delivered_filter, normalize_parcel, sort_parcels_by_ts
+
+if TYPE_CHECKING:
+    from ..live_tracker import LiveTracker
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -185,6 +188,9 @@ class AmazonCoordinator(DataUpdateCoordinator[list[dict]]):
         self._cached_device_id: str | None = None
         # Timestamp of the last successful poll (diagnostic sensor).
         self.last_success_time: datetime | None = None
+        # The courier-map follower, set by the entry setup; it keeps each
+        # active parcel's ``live`` dict across polls.
+        self.live: LiveTracker | None = None
 
     @property
     def current_tier_minutes(self) -> int | None:
@@ -323,7 +329,20 @@ class AmazonCoordinator(DataUpdateCoordinator[list[dict]]):
         self.update_interval = _next_update_interval(
             now, self._current_tier_minutes, self.config_entry.entry_id
         )
+        if self.live is not None:
+            self.live.async_apply(normalized_active)
         return normalized_active
+
+    def async_fire_parcel_event(
+        self, barcode: str, extra: dict[str, Any], event_type: str
+    ) -> None:
+        """Fire ``event_type`` for one active parcel: the parcel, then ``extra``."""
+        parcel = next((p for p in self.data or [] if p.get("barcode") == barcode), None)
+        if parcel is None:
+            return
+        self.hass.bus.async_fire(
+            event_type, {**parcel, "device_id": self._device_id(), **extra}
+        )
 
     def _carry_known_state(self, parcels: list[dict]) -> None:
         """Treat a barcode as known when it is not really a new parcel.

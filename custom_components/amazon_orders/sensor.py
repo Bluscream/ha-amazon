@@ -57,6 +57,7 @@ async def async_setup_entry(
         f"{entry_id}_awaiting_pickup",
         f"{entry_id}_delivered_parcels",
         f"{entry_id}_last_update",
+        f"{entry_id}_courier_stops_away",
     }
     for entity_entry in er.async_entries_for_config_entry(registry, entry_id):
         if (
@@ -81,6 +82,7 @@ async def async_setup_entry(
     entities.append(AmazonEnRouteToPickupPointSensor(coordinator, entry))
     entities.append(AmazonAwaitingPickupSensor(coordinator, entry))
     entities.append(AmazonDeliveredParcelsSensor(coordinator, entry))
+    entities.append(AmazonCourierStopsAwaySensor(coordinator, entry))
     entities.append(AmazonLastUpdateSensor(coordinator, entry))
 
     async_add_entities(entities)
@@ -157,7 +159,7 @@ class AmazonParcelSensor(CoordinatorEntity[AmazonCoordinator], SensorEntity):
     _attr_has_entity_name = True
     _attr_translation_key = "parcel"
     _attr_attribution = ATTRIBUTION
-    _unrecorded_attributes = frozenset({"raw", "history"})
+    _unrecorded_attributes = frozenset({"raw", "history", "live"})
 
     def __init__(
         self, coordinator: AmazonCoordinator, entry: ConfigEntry, barcode: str
@@ -315,6 +317,48 @@ class AmazonDeliveredParcelsSensor(CoordinatorEntity[AmazonCoordinator], SensorE
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the extra state attributes."""
         return {"parcels": self.coordinator.delivered}
+
+
+class AmazonCourierStopsAwaySensor(CoordinatorEntity[AmazonCoordinator], SensorEntity):
+    """Fewest stops a courier still has before one of the parcels (parcel-live/1)."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "courier_stops_away"
+    _attr_attribution = ATTRIBUTION
+
+    def __init__(self, coordinator: AmazonCoordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_courier_stops_away"
+        self._attr_device_info = build_device_info(entry)
+
+    def _nearest(self) -> dict[str, Any] | None:
+        counted = [
+            parcel
+            for parcel in self.coordinator.data or []
+            if (live := parcel.get("live"))
+            and live.get("state") in ("en_route", "next_stop")
+            and live.get("stops_away") is not None
+        ]
+        return min(counted, key=lambda p: p["live"]["stops_away"], default=None)
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the native value of the sensor."""
+        parcel = self._nearest()
+        return parcel["live"]["stops_away"] if parcel else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Name the parcel the count is for."""
+        parcel = self._nearest()
+        if parcel is None:
+            return {}
+        return {
+            "barcode": parcel.get("barcode"),
+            "live_state": parcel["live"].get("state"),
+            "message": parcel["live"].get("message"),
+        }
 
 
 class AmazonLastUpdateSensor(CoordinatorEntity[AmazonCoordinator], SensorEntity):

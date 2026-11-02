@@ -74,6 +74,15 @@
             "data_description": {
               "hand_off": "I pacchi dei corrieri senza integrazione configurata restano qui."
             }
+          },
+          "live": {
+            "name": "Mappa del corriere in tempo reale",
+            "data": {
+              "live_tracking": "Segui il corriere mentre un pacco è in consegna"
+            },
+            "data_description": {
+              "live_tracking": "Mentre il corriere di Amazon consegna un pacco, legge dove si trova e quante fermate mancano, come fa la pagina di tracciamento: circa una volta al minuto finché è mostrato, ogni cinque minuti fino ad allora."
+            }
           }
         }
       }
@@ -92,7 +101,8 @@
       "parcel_registered": "Un pacco è stato registrato",
       "parcel_status_changed": "Lo stato di un pacco è cambiato",
       "parcel_delivered": "Un pacco è stato consegnato",
-      "parcel_delivery_time_changed": "L'orario di consegna previsto di un pacco è cambiato"
+      "parcel_delivery_time_changed": "L'orario di consegna previsto di un pacco è cambiato",
+      "parcel_live_updated": "Il corriere di un pacco si è avvicinato, oppure la sua consegna in tempo reale è iniziata o terminata"
     }
   },
   "entity": {
@@ -131,6 +141,9 @@
       },
       "parcel": {
         "name": "Pacco {barcode}"
+      },
+      "courier_stops_away": {
+        "name": "Fermate del corriere"
       }
     }
   },

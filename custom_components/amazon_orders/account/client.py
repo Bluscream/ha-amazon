@@ -34,10 +34,21 @@ from ..const import (
 )
 from .auth import exchange_token_for_cookies, refresh_access_token
 from .errors import AmazonApiError, AmazonAuthError
+from .live import (
+    LIVE_STATE_PATH,
+    STALE_TOKEN_CODES,
+    LiveReading,
+    LiveTarget,
+    live_target,
+    parse_location_state,
+    request_form,
+    response_code,
+)
 from .pages import (
     BUSINESS_HISTORY_PATH,
     BusinessRequest,
     OrderTile,
+    _page_state,
     build_record,
     business_card_count,
     business_cards_found,
@@ -96,6 +107,12 @@ class AmazonClient:
         # Business: a delivered card drops its shipment and tracking link, so
         # the in-flight card's are kept to carry the parcel over.
         self._business_lines: dict[tuple[str, str], tuple[str, str]] = {}
+        # Courier map: per tracking id, what its location requests need (read
+        # off the last tracking page) and how many it has sent, which the page
+        # itself counts up in every request.
+        self._live_targets: dict[str, LiveTarget] = {}
+        self._live_polls: dict[str, int] = {}
+        self._live_lock = asyncio.Lock()
 
     async def _authenticate(self) -> None:
         """Renew the access token and mint fresh website cookies."""
@@ -316,6 +333,10 @@ class AmazonClient:
             if zone_name := page_timezone(track_page):
                 await dt_util.async_get_time_zone(zone_name)
             track = parse_track_page(track_page, today)
+            if track_path and (
+                target := live_target(track.state, track_page, track_path)
+            ):
+                self._live_targets[target.tracking_id] = target
             # A line not yet dispatched has neither, legitimately.
             if (
                 track.tracking_id is None
@@ -418,4 +439,78 @@ class AmazonClient:
                 records.append(self._final[key])
             elif key in self._last:
                 records.append(self._last[key][0])
+        listed = {record.get("tracking_id") for record in records}
+        self._live_targets = {
+            code: target
+            for code, target in self._live_targets.items()
+            if code in listed
+        }
+        self._live_polls = {
+            code: n for code, n in self._live_polls.items() if code in listed
+        }
         return records
+
+    def can_read_live(self, tracking_id: str) -> bool:
+        """Whether a tracking page gave what a location request needs."""
+        return tracking_id in self._live_targets
+
+    async def async_read_live(self, tracking_id: str) -> LiveReading | None:
+        """Ask where the courier carrying ``tracking_id`` is, as its page does.
+
+        ``None`` when Amazon shows no courier (not on the road yet, a
+        third-party carrier, or the session ended). A token the endpoint
+        refuses is renewed once from a fresh tracking page. Raises
+        :class:`AmazonAuthError` only when even that page wants a sign-in, and
+        :class:`AmazonApiError` on a rate limit.
+        """
+        target = self._live_targets.get(tracking_id)
+        if target is None:
+            return None
+        async with self._live_lock:
+            payload = await self._post_live(target)
+            if payload is None or response_code(payload) in STALE_TOKEN_CODES:
+                renewed = await self._renew_live_target(target)
+                if renewed is None:
+                    return None
+                payload = await self._post_live(renewed)
+        return parse_location_state(payload)
+
+    async def _renew_live_target(self, target: LiveTarget) -> LiveTarget | None:
+        """Mint fresh cookies and re-read the tracking page for a new token."""
+        await self._authenticate()
+        page = await self._fetch_page(target.track_path)
+        renewed = live_target(_page_state(page), page, target.track_path)
+        if renewed is None:
+            self._live_targets.pop(target.tracking_id, None)
+            return None
+        self._live_targets[renewed.tracking_id] = renewed
+        return renewed
+
+    async def _post_live(self, target: LiveTarget) -> object | None:
+        """Send one location request; ``None`` when the session was refused."""
+        polls = self._live_polls.get(target.tracking_id, 0)
+        self._live_polls[target.tracking_id] = polls + 1
+        origin = f"https://www.{self._domain}"
+        headers = {
+            "User-Agent": WEB_USER_AGENT,
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "X-Requested-With": "XMLHttpRequest",
+            "Origin": origin,
+            "Referer": f"{origin}{target.track_path}",
+        }
+        async with self._session.post(
+            f"{origin}{LIVE_STATE_PATH}",
+            data=request_form(target, polls),
+            headers=headers,
+        ) as response:
+            if response.status in (401, 403):
+                return None
+            if response.status != 200:
+                raise AmazonApiError(
+                    f"HTTP {response.status}", status_code=response.status
+                )
+            try:
+                return await response.json(content_type=None)
+            except ValueError:
+                # A sign-in page instead of JSON: treat like a refused session.
+                return None

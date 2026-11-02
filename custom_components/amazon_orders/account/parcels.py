@@ -391,6 +391,9 @@ def normalize_parcel(raw: dict, *, include_history: bool = False) -> dict:
         "weight": None,
         "dimensions": None,
         "history": build_history(raw.get("events")) if include_history else None,
+        # parcel-live/1: filled in by the live tracker while Amazon shows the
+        # courier; a fresh poll alone never knows it.
+        "live": None,
         "raw": raw,
     }
 

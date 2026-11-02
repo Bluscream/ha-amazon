@@ -74,6 +74,15 @@
             "data_description": {
               "hand_off": "連携が設定されていない配送会社の荷物は、ここに残ります。"
             }
+          },
+          "live": {
+            "name": "配達員のライブマップ",
+            "data": {
+              "live_tracking": "荷物の配達中に配達員を追跡する"
+            },
+            "data_description": {
+              "live_tracking": "Amazon 自身の配達員が荷物を配達している間、追跡ページと同じように配達員の位置と残りの停車数を読み取ります。表示中は約1分ごと、それまでは5分ごとです。"
+            }
           }
         }
       }
@@ -92,7 +101,8 @@
       "parcel_registered": "荷物が登録された",
       "parcel_status_changed": "荷物のステータスが変わった",
       "parcel_delivered": "荷物が配達された",
-      "parcel_delivery_time_changed": "荷物の配達予定時刻が変わった"
+      "parcel_delivery_time_changed": "荷物の配達予定時刻が変わった",
+      "parcel_live_updated": "荷物の配達員が近づいた、またはライブ配達が開始・終了した"
     }
   },
   "entity": {
@@ -131,6 +141,9 @@
       },
       "parcel": {
         "name": "荷物 {barcode}"
+      },
+      "courier_stops_away": {
+        "name": "配達員の残り停車数"
       }
     }
   },

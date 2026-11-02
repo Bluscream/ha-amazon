@@ -74,6 +74,15 @@
             "data_description": {
               "hand_off": "Pakketten van vervoerders zonder ingestelde integratie blijven hier staan."
             }
+          },
+          "live": {
+            "name": "Live kaart van de bezorger",
+            "data": {
+              "live_tracking": "Volg de bezorger terwijl een pakket onderweg is"
+            },
+            "data_description": {
+              "live_tracking": "Terwijl Amazons eigen bezorger een pakket bezorgt, wordt net als op de volgpagina gelezen waar de bezorger is en hoeveel stops er nog zijn: ongeveer eens per minuut zolang die getoond wordt, tot dan elke vijf minuten."
+            }
           }
         }
       }
@@ -92,7 +101,8 @@
       "parcel_registered": "Een pakket is geregistreerd",
       "parcel_status_changed": "De status van een pakket is gewijzigd",
       "parcel_delivered": "Een pakket is bezorgd",
-      "parcel_delivery_time_changed": "De verwachte bezorgtijd van een pakket is gewijzigd"
+      "parcel_delivery_time_changed": "De verwachte bezorgtijd van een pakket is gewijzigd",
+      "parcel_live_updated": "De bezorger van een pakket kwam dichterbij, of de live bezorging begon of eindigde"
     }
   },
   "entity": {
@@ -131,6 +141,9 @@
       },
       "parcel": {
         "name": "Pakket {barcode}"
+      },
+      "courier_stops_away": {
+        "name": "Stops van de bezorger"
       }
     }
   },

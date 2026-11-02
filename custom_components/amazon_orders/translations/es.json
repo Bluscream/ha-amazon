@@ -74,6 +74,15 @@
             "data_description": {
               "hand_off": "Los paquetes de transportistas sin integración configurada se quedan aquí."
             }
+          },
+          "live": {
+            "name": "Mapa del repartidor en directo",
+            "data": {
+              "live_tracking": "Seguir al repartidor mientras un paquete está en reparto"
+            },
+            "data_description": {
+              "live_tracking": "Mientras el propio repartidor de Amazon reparte un paquete, lee dónde está y cuántas paradas faltan, como hace la página de seguimiento: aproximadamente una vez por minuto mientras se muestra, cada cinco minutos hasta entonces."
+            }
           }
         }
       }
@@ -92,7 +101,8 @@
       "parcel_registered": "Se registró un paquete",
       "parcel_status_changed": "El estado de un paquete ha cambiado",
       "parcel_delivered": "Se entregó un paquete",
-      "parcel_delivery_time_changed": "La hora de entrega prevista de un paquete ha cambiado"
+      "parcel_delivery_time_changed": "La hora de entrega prevista de un paquete ha cambiado",
+      "parcel_live_updated": "El repartidor de un paquete se ha acercado, o su entrega en directo ha empezado o terminado"
     }
   },
   "entity": {
@@ -131,6 +141,9 @@
       },
       "parcel": {
         "name": "Paquete {barcode}"
+      },
+      "courier_stops_away": {
+        "name": "Paradas del repartidor"
       }
     }
   },

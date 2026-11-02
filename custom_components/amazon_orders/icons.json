@@ -31,6 +31,9 @@
       },
       "parcel": {
         "default": "mdi:package-variant-closed"
+      },
+      "courier_stops_away": {
+        "default": "mdi:map-marker-distance"
       }
     }
   }

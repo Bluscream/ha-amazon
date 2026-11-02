@@ -330,6 +330,7 @@ async def test_turning_hand_off_off_takes_effect_on_the_reload(hass):
                 },
                 "history": {"include_history": False},
                 "hand_off": {CONF_HAND_OFF: False},
+                "live": {"live_tracking": True},
             },
         )
         await hass.async_block_till_done()

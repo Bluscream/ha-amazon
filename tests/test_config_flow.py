@@ -21,6 +21,7 @@ from custom_components.amazon_orders.const import (
     CONF_HAND_OFF,
     CONF_INCLUDE_HISTORY,
     CONF_LANDING_URL,
+    CONF_LIVE_TRACKING,
     CONF_REFRESH_TOKEN,
     DOMAIN,
 )
@@ -113,6 +114,8 @@ async def test_user_flow_shows_the_sign_in_link_then_creates_the_entry(hass):
     serial = result["data"][CONF_DEVICE_SERIAL]
     assert len(serial) == 32
     assert result["options"][CONF_INCLUDE_HISTORY] is False
+    # The courier map is on unless the user turns it off in the options.
+    assert result["options"][CONF_LIVE_TRACKING] is True
     # The code went to registration together with this flow's own serial.
     args = register.await_args.args
     assert args[1] == COUNTRY and args[2] == serial and args[4] == "CODE123"
@@ -351,6 +354,7 @@ async def test_options_flow_saves_and_reloads(hass):
                 },
                 "history": {CONF_INCLUDE_HISTORY: True},
                 "hand_off": {CONF_HAND_OFF: False},
+                "live": {CONF_LIVE_TRACKING: False},
             },
         )
 
@@ -360,6 +364,7 @@ async def test_options_flow_saves_and_reloads(hass):
         CONF_DELIVERED_FILTER_AMOUNT: 5,
         CONF_INCLUDE_HISTORY: True,
         CONF_HAND_OFF: False,
+        CONF_LIVE_TRACKING: False,
     }
     # A changed setting only takes effect on reload, which OptionsFlowWithReload
     # schedules once the new options are saved.

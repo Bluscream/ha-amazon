@@ -27,13 +27,27 @@ class ParcelStatus(StrEnum):
     UNKNOWN = "unknown"  # Raw status we have not mapped yet
 
 
-PLATFORMS = [Platform.BUTTON, Platform.CALENDAR, Platform.SENSOR]
+PLATFORMS = [
+    Platform.BUTTON,
+    Platform.CALENDAR,
+    Platform.GEO_LOCATION,
+    Platform.SENSOR,
+]
 
-# Every optional key the parcel contract defines. CAPABILITIES below must be a
-# subset of this — it exists so a typo in CAPABILITIES fails a test instead of
-# silently dropping a carrier off a table on the docs site.
+# Every optional key the parcel contract defines, plus ``live`` from the
+# parcel-live/1 extension. CAPABILITIES below must be a subset of this — it
+# exists so a typo in CAPABILITIES fails a test instead of silently dropping a
+# carrier off a table on the docs site.
 KNOWN_CAPABILITIES = frozenset(
-    {"weight", "dimensions", "delivery_window", "pickup_point", "url", "history"}
+    {
+        "weight",
+        "dimensions",
+        "delivery_window",
+        "pickup_point",
+        "url",
+        "history",
+        "live",
+    }
 )
 
 # Every value not listed here must come back as a literal ``None`` from
@@ -55,7 +69,12 @@ CAPABILITIES = frozenset({"url", "history", "delivery_window"})
 # into CAPABILITIES. A multi-backend carrier declares
 # PENDING_CAPABILITIES_BY_VARIANT with the same keys as its
 # CAPABILITIES_BY_VARIANT instead (omit backends with nothing pending).
-PENDING_CAPABILITIES: frozenset[str] = frozenset()
+#
+# ``live`` (the courier map) is built from Amazon's own map script and its
+# request shapes, but no live session has been read through this integration
+# yet. normalize_parcel() always returns it as ``None``; the live tracker
+# fills it in afterwards, only while Amazon shows the courier.
+PENDING_CAPABILITIES: frozenset[str] = frozenset({"live"})
 
 # If this carrier ever grows a second backend with a genuinely different
 # payload shape (a country-specific API, not just a config option), replace
@@ -191,3 +210,21 @@ HAND_OFF_CARRIERS = {
 # hand-off: with one of them set up, the carrier is not "missing".
 HAND_OFF_COVERED_BY = {"dhl": ("dhl_nl",)}
 SERVICE_TRACK_PARCEL = "track_parcel"
+
+# Live courier tracking (parcel-live/1, see the fork's LIVE_TRACKING.md). On by
+# default: it only ever reads parcels Amazon's own fleet has out for delivery,
+# and only while the tracking page offers the courier map. The tracking page
+# itself asks every 30 s; a minute is plenty for a dashboard and half the load.
+CONF_LIVE_TRACKING = "live_tracking"
+DEFAULT_LIVE_TRACKING = True
+LIVE_INTERVAL_SECONDS = 60
+# Out for delivery but no courier shown yet: Amazon opens the map only for the
+# last stops, so ask less often until it does.
+LIVE_PROBE_SECONDS = 300
+LIVE_BACKOFF_CAP_SECONDS = 1800
+EVENT_PARCEL_LIVE_UPDATED = f"{DOMAIN}_parcel_live_updated"
+
+
+def live_signal(entry_id: str) -> str:
+    """Dispatcher signal sent after every live read of one config entry."""
+    return f"{DOMAIN}_live_{entry_id}"

@@ -20,7 +20,7 @@ from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 from homeassistant.helpers.trigger import TriggerActionType, TriggerInfo
 from homeassistant.helpers.typing import ConfigType
 
-from .const import DOMAIN
+from .const import DOMAIN, EVENT_PARCEL_LIVE_UPDATED
 
 # Device-trigger type -> bus event fired by the coordinator.
 TRIGGER_EVENTS = {
@@ -28,6 +28,7 @@ TRIGGER_EVENTS = {
     "parcel_status_changed": f"{DOMAIN}_parcel_status_changed",
     "parcel_delivered": f"{DOMAIN}_parcel_delivered",
     "parcel_delivery_time_changed": f"{DOMAIN}_parcel_delivery_time_changed",
+    "parcel_live_updated": EVENT_PARCEL_LIVE_UPDATED,
 }
 TRIGGER_TYPES = set(TRIGGER_EVENTS)
 

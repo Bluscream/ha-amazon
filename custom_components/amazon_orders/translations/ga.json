@@ -74,6 +74,15 @@
             "data_description": {
               "hand_off": "Fanann beartáin ó iompróirí gan comhtháthú socraithe anseo."
             }
+          },
+          "live": {
+            "name": "Léarscáil bheo an chúiréara",
+            "data": {
+              "live_tracking": "Lean an cúiréir fad atá beart amuigh le seachadadh"
+            },
+            "data_description": {
+              "live_tracking": "Fad atá cúiréir Amazon féin ag seachadadh birt, léigh cá bhfuil sé agus cé mhéad stad atá fágtha, mar a dhéanann an leathanach rianaithe: thart ar uair sa nóiméad fad a thaispeántar é, gach cúig nóiméad go dtí sin."
+            }
           }
         }
       }
@@ -92,7 +101,8 @@
       "parcel_registered": "Cláraíodh pacáiste",
       "parcel_status_changed": "D'athraigh stádas pacáiste",
       "parcel_delivered": "Seachadadh pacáiste",
-      "parcel_delivery_time_changed": "D'athraigh am seachadta measta pacáiste"
+      "parcel_delivery_time_changed": "D'athraigh am seachadta measta pacáiste",
+      "parcel_live_updated": "Tháinig cúiréir birt níos gaire, nó thosaigh nó chríochnaigh a sheachadadh beo"
     }
   },
   "entity": {
@@ -131,6 +141,9 @@
       },
       "parcel": {
         "name": "Pacáiste {barcode}"
+      },
+      "courier_stops_away": {
+        "name": "Stadanna an chúiréara"
       }
     }
   },

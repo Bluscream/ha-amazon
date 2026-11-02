@@ -74,6 +74,15 @@
             "data_description": {
               "hand_off": "Parcels from carriers without an integration set up stay here."
             }
+          },
+          "live": {
+            "name": "Live courier map",
+            "data": {
+              "live_tracking": "Follow the courier while a parcel is out for delivery"
+            },
+            "data_description": {
+              "live_tracking": "While Amazon's own courier has a parcel out for delivery, read where the courier is and how many stops are left, as the tracking page does: about once a minute while the courier is shown, every five minutes until then."
+            }
           }
         }
       }
@@ -92,7 +101,8 @@
       "parcel_registered": "A parcel was registered",
       "parcel_status_changed": "A parcel's status changed",
       "parcel_delivered": "A parcel was delivered",
-      "parcel_delivery_time_changed": "A parcel's expected delivery time changed"
+      "parcel_delivery_time_changed": "A parcel's expected delivery time changed",
+      "parcel_live_updated": "A parcel's courier came closer, or its live delivery started or ended"
     }
   },
   "entity": {
@@ -131,6 +141,9 @@
       },
       "parcel": {
         "name": "Parcel {barcode}"
+      },
+      "courier_stops_away": {
+        "name": "Courier stops away"
       }
     }
   },

@@ -74,6 +74,15 @@
             "data_description": {
               "hand_off": "Paket från fraktbolag utan inställd integration blir kvar här."
             }
+          },
+          "live": {
+            "name": "Budets livekarta",
+            "data": {
+              "live_tracking": "Följ budet medan ett paket är ute för leverans"
+            },
+            "data_description": {
+              "live_tracking": "Medan Amazons eget bud levererar ett paket läses var budet är och hur många stopp som är kvar, precis som spårningssidan gör: ungefär en gång i minuten medan budet visas, var femte minut fram till dess."
+            }
           }
         }
       }
@@ -92,7 +101,8 @@
       "parcel_registered": "Ett paket registrerades",
       "parcel_status_changed": "Ett pakets status ändrades",
       "parcel_delivered": "Ett paket levererades",
-      "parcel_delivery_time_changed": "Ett pakets förväntade leveranstid ändrades"
+      "parcel_delivery_time_changed": "Ett pakets förväntade leveranstid ändrades",
+      "parcel_live_updated": "Ett pakets bud kom närmare, eller dess liveleverans började eller slutade"
     }
   },
   "entity": {
@@ -131,6 +141,9 @@
       },
       "parcel": {
         "name": "Paket {barcode}"
+      },
+      "courier_stops_away": {
+        "name": "Budets återstående stopp"
       }
     }
   },

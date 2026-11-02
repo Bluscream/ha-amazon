@@ -74,6 +74,15 @@
             "data_description": {
               "hand_off": "Encomendas de transportadoras sem integração configurada continuam aqui."
             }
+          },
+          "live": {
+            "name": "Mapa do entregador ao vivo",
+            "data": {
+              "live_tracking": "Acompanhar o entregador enquanto um pacote está saindo para entrega"
+            },
+            "data_description": {
+              "live_tracking": "Enquanto o próprio entregador da Amazon entrega um pacote, lê onde ele está e quantas paradas faltam, como a página de rastreamento faz: cerca de uma vez por minuto enquanto ele aparece, a cada cinco minutos até lá."
+            }
           }
         }
       }
@@ -92,7 +101,8 @@
       "parcel_registered": "Um pacote foi registrado",
       "parcel_status_changed": "O status de um pacote foi alterado",
       "parcel_delivered": "Um pacote foi entregue",
-      "parcel_delivery_time_changed": "O horário de entrega previsto de um pacote foi alterado"
+      "parcel_delivery_time_changed": "O horário de entrega previsto de um pacote foi alterado",
+      "parcel_live_updated": "O entregador de um pacote se aproximou, ou a entrega ao vivo começou ou terminou"
     }
   },
   "entity": {
@@ -131,6 +141,9 @@
       },
       "parcel": {
         "name": "Pacote {barcode}"
+      },
+      "courier_stops_away": {
+        "name": "Paradas do entregador"
       }
     }
   },

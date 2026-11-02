@@ -74,6 +74,15 @@
             "data_description": {
               "hand_off": "Pakete von Paketdiensten ohne eingerichtete Integration bleiben hier."
             }
+          },
+          "live": {
+            "name": "Live-Karte des Zustellers",
+            "data": {
+              "live_tracking": "Zusteller verfolgen, während ein Paket in Zustellung ist"
+            },
+            "data_description": {
+              "live_tracking": "Während Amazons eigener Zusteller ein Paket ausliefert, wird wie auf der Sendungsverfolgungsseite gelesen, wo der Zusteller ist und wie viele Stopps noch fehlen: etwa einmal pro Minute, solange er angezeigt wird, bis dahin alle fünf Minuten."
+            }
           }
         }
       }
@@ -92,7 +101,8 @@
       "parcel_registered": "Ein Paket wurde registriert",
       "parcel_status_changed": "Der Status eines Pakets hat sich geändert",
       "parcel_delivered": "Ein Paket wurde zugestellt",
-      "parcel_delivery_time_changed": "Die voraussichtliche Zustellzeit eines Pakets hat sich geändert"
+      "parcel_delivery_time_changed": "Die voraussichtliche Zustellzeit eines Pakets hat sich geändert",
+      "parcel_live_updated": "Der Zusteller eines Pakets ist näher gekommen, oder seine Live-Zustellung hat begonnen oder geendet"
     }
   },
   "entity": {
@@ -131,6 +141,9 @@
       },
       "parcel": {
         "name": "Paket {barcode}"
+      },
+      "courier_stops_away": {
+        "name": "Stopps bis zum Zusteller"
       }
     }
   },

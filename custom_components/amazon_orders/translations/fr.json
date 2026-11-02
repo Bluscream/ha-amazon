@@ -74,6 +74,15 @@
             "data_description": {
               "hand_off": "Les colis des transporteurs sans intégration configurée restent ici."
             }
+          },
+          "live": {
+            "name": "Carte du livreur en direct",
+            "data": {
+              "live_tracking": "Suivre le livreur pendant qu'un colis est en cours de livraison"
+            },
+            "data_description": {
+              "live_tracking": "Pendant que le livreur d'Amazon livre un colis, lit où il se trouve et combien d'arrêts il reste, comme la page de suivi : environ une fois par minute tant qu'il est affiché, toutes les cinq minutes jusque-là."
+            }
           }
         }
       }
@@ -92,7 +101,8 @@
       "parcel_registered": "Un colis a été enregistré",
       "parcel_status_changed": "Le statut d'un colis a changé",
       "parcel_delivered": "Un colis a été livré",
-      "parcel_delivery_time_changed": "L'heure de livraison prévue d'un colis a changé"
+      "parcel_delivery_time_changed": "L'heure de livraison prévue d'un colis a changé",
+      "parcel_live_updated": "Le livreur d'un colis s'est rapproché, ou sa livraison en direct a commencé ou s'est terminée"
     }
   },
   "entity": {
@@ -131,6 +141,9 @@
       },
       "parcel": {
         "name": "Colis {barcode}"
+      },
+      "courier_stops_away": {
+        "name": "Arrêts restants du livreur"
       }
     }
   },
