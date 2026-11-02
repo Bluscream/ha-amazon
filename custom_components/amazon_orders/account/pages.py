@@ -193,6 +193,7 @@ class TrackInfo:
     delivery_photo_url: str | None = None
     delivery_photo_expires: str | None = None
     item_image_url: str | None = None
+    item_image_urls: list[str] = field(default_factory=list)
 
 
 def looks_signed_out(page: str) -> bool:
@@ -676,8 +677,18 @@ def parse_track_page(page: str, today: date) -> TrackInfo:
     if not isinstance(page_zone, str):
         page_zone = None
     photo = parse_delivery_photo(page)
-    img_match = _ITEM_IMAGE_RE.search(page)
-    item_image = html.unescape(img_match.group(1).strip()) if img_match else None
+    item_images = [
+        html.unescape(m.group(1).strip())
+        for m in _ITEM_IMAGE_RE.finditer(page)
+    ]
+    # Deduplicate while preserving order
+    seen_urls: set[str] = set()
+    unique_item_images: list[str] = []
+    for u in item_images:
+        if u not in seen_urls:
+            seen_urls.add(u)
+            unique_item_images.append(u)
+    item_image = unique_item_images[0] if unique_item_images else None
     return TrackInfo(
         tracking_id=str(tracking_id) if tracking_id else None,
         carrier_code=_CARRIER_ALIASES.get(carrier.group(1), carrier.group(1))
@@ -690,6 +701,7 @@ def parse_track_page(page: str, today: date) -> TrackInfo:
         delivery_photo_url=photo,
         delivery_photo_expires=delivery_photo_expiry(photo),
         item_image_url=item_image,
+        item_image_urls=unique_item_images,
     )
 
 
@@ -789,6 +801,18 @@ def build_record(
         "events": track.events if track else [],
         "items": [tile.title for tile in tiles],
         "image_url": track.item_image_url if track else None,
+        "image_urls": track.item_image_urls if track else [],
+        "order_items": [
+            {
+                "title": tile.title,
+                "image_url": (
+                    track.item_image_urls[i]
+                    if track and i < len(track.item_image_urls)
+                    else (track.item_image_url if track and i == 0 else None)
+                ),
+            }
+            for i, tile in enumerate(tiles)
+        ],
         "pop_path": lead.pop_path,
         "track_path": track_path,
         "page_state": track.state if track else {},

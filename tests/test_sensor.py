@@ -72,6 +72,31 @@ def test_parcel_sensor_status_and_attributes():
     }
 
 
+def test_parcel_sensor_tiled_entity_picture():
+    img1 = "https://m.media-amazon.com/images/I/item1.jpg"
+    img2 = "https://m.media-amazon.com/images/I/item2.jpg"
+    parcel = _parcel(
+        "A",
+        status=ParcelStatus.OUT_FOR_DELIVERY,
+        raw={
+            "items": ["Item 1", "Item 2"],
+            "image_urls": [img1, img2],
+            "order_items": [
+                {"title": "Item 1", "image_url": img1},
+                {"title": "Item 2", "image_url": img2},
+            ],
+        },
+    )
+    sensor = AmazonParcelSensor(_coordinator([parcel]), _entry(), "A")
+    picture = sensor.entity_picture
+    assert picture is not None
+    assert picture.startswith("data:image/svg+xml;utf8,")
+    assert "topleft" in picture
+    assert "bottomright" in picture
+    assert "item1.jpg" in picture
+    assert "item2.jpg" in picture
+
+
 def test_parcel_sensor_single_item_truncation():
     # 80 chars - should not be truncated because single item limit is 128
     title_80 = "Veet Expert Hair Removal Cream Sensitive Skin with Shea Butter & Tested Formula"

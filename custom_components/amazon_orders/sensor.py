@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import urllib.parse
 from datetime import datetime
 from typing import Any
 
@@ -153,6 +154,77 @@ class AmazonIncomingParcelsSensor(CoordinatorEntity[AmazonCoordinator], SensorEn
         super()._handle_coordinator_update()
 
 
+def build_tiled_image_svg(image_urls: list[str]) -> str | None:
+    """Generate an SVG data URI collage for multiple item images.
+
+    - 1 image: return the URL directly.
+    - 2 images: diagonal split from bottom-left (0, 256) to top-right (256, 0).
+    - 3 images: top half split vertically, bottom half full width.
+    - 4+ images: 2x2 grid.
+    """
+    valid = [u for u in image_urls if u and isinstance(u, str)]
+    if not valid:
+        return None
+    if len(valid) == 1:
+        return valid[0]
+
+    u1 = valid[0]
+    u2 = valid[1]
+
+    if len(valid) == 2:
+        svg = (
+            '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
+            'width="256" height="256" viewBox="0 0 256 256">'
+            '<defs>'
+            '<clipPath id="topleft"><polygon points="0,0 256,0 0,256"/></clipPath>'
+            '<clipPath id="bottomright"><polygon points="256,0 256,256 0,256"/></clipPath>'
+            '</defs>'
+            f'<image href="{u1}" width="256" height="256" preserveAspectRatio="xMidYMid slice" clip-path="url(#topleft)"/>'
+            f'<image href="{u2}" width="256" height="256" preserveAspectRatio="xMidYMid slice" clip-path="url(#bottomright)"/>'
+            '<line x1="0" y1="256" x2="256" y2="0" stroke="#ffffff" stroke-width="3"/>'
+            '</svg>'
+        )
+    elif len(valid) == 3:
+        u3 = valid[2]
+        svg = (
+            '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
+            'width="256" height="256" viewBox="0 0 256 256">'
+            '<defs>'
+            '<clipPath id="c1"><rect x="0" y="0" width="128" height="128"/></clipPath>'
+            '<clipPath id="c2"><rect x="128" y="0" width="128" height="128"/></clipPath>'
+            '<clipPath id="c3"><rect x="0" y="128" width="256" height="128"/></clipPath>'
+            '</defs>'
+            f'<image href="{u1}" x="0" y="0" width="128" height="128" preserveAspectRatio="xMidYMid slice" clip-path="url(#c1)"/>'
+            f'<image href="{u2}" x="128" y="0" width="128" height="128" preserveAspectRatio="xMidYMid slice" clip-path="url(#c2)"/>'
+            f'<image href="{u3}" x="0" y="128" width="256" height="128" preserveAspectRatio="xMidYMid slice" clip-path="url(#c3)"/>'
+            '<line x1="128" y1="0" x2="128" y2="128" stroke="#ffffff" stroke-width="2"/>'
+            '<line x1="0" y1="128" x2="256" y2="128" stroke="#ffffff" stroke-width="2"/>'
+            '</svg>'
+        )
+    else:
+        u3 = valid[2]
+        u4 = valid[3]
+        svg = (
+            '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
+            'width="256" height="256" viewBox="0 0 256 256">'
+            '<defs>'
+            '<clipPath id="c1"><rect x="0" y="0" width="128" height="128"/></clipPath>'
+            '<clipPath id="c2"><rect x="128" y="0" width="128" height="128"/></clipPath>'
+            '<clipPath id="c3"><rect x="0" y="128" width="128" height="128"/></clipPath>'
+            '<clipPath id="c4"><rect x="128" y="128" width="128" height="128"/></clipPath>'
+            '</defs>'
+            f'<image href="{u1}" x="0" y="0" width="128" height="128" preserveAspectRatio="xMidYMid slice" clip-path="url(#c1)"/>'
+            f'<image href="{u2}" x="128" y="0" width="128" height="128" preserveAspectRatio="xMidYMid slice" clip-path="url(#c2)"/>'
+            f'<image href="{u3}" x="0" y="128" width="128" height="128" preserveAspectRatio="xMidYMid slice" clip-path="url(#c3)"/>'
+            f'<image href="{u4}" x="128" y="128" width="128" height="128" preserveAspectRatio="xMidYMid slice" clip-path="url(#c4)"/>'
+            '<line x1="128" y1="0" x2="128" y2="256" stroke="#ffffff" stroke-width="2"/>'
+            '<line x1="0" y1="128" x2="256" y2="128" stroke="#ffffff" stroke-width="2"/>'
+            '</svg>'
+        )
+
+    return "data:image/svg+xml;utf8," + urllib.parse.quote(svg)
+
+
 class AmazonParcelSensor(CoordinatorEntity[AmazonCoordinator], SensorEntity):
     """Per-parcel sensor reporting the status of one tracked Amazon parcel."""
 
@@ -225,11 +297,25 @@ class AmazonParcelSensor(CoordinatorEntity[AmazonCoordinator], SensorEntity):
 
     @property
     def entity_picture(self) -> str | None:
-        """Return the product image URL, or delivery photo if delivered."""
+        """Return the product image URL (or tiled collage if multiple items), or delivery photo if delivered."""
         parcel = self._get_parcel()
         if not parcel:
             return None
         raw = parcel.get("raw") or {}
+        image_urls = raw.get("image_urls")
+        if not image_urls:
+            order_items = raw.get("order_items")
+            if order_items and isinstance(order_items, list):
+                image_urls = [
+                    item.get("image_url")
+                    for item in order_items
+                    if isinstance(item, dict) and item.get("image_url")
+                ]
+        if image_urls and len(image_urls) > 1:
+            tiled = build_tiled_image_svg(image_urls)
+            if tiled:
+                return tiled
+
         return (
             raw.get("image_url")
             or raw.get("delivery_photo_url")

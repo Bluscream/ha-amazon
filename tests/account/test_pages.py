@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from custom_components.amazon_orders.account.pages import (
+    OrderTile,
     _day_month,
     build_record,
     business_card_count,
@@ -298,6 +299,35 @@ def test_track_page_extracts_item_image():
     )
     info = parse_track_page(page, TODAY)
     assert info.item_image_url == img_url
+    assert info.item_image_urls == [img_url]
+
+
+def test_track_page_extracts_multiple_item_images_and_order_items():
+    img1 = "https://m.media-amazon.com/images/I/item1.jpg"
+    img2 = "https://m.media-amazon.com/images/I/item2.jpg"
+    page = (
+        '<html><body>'
+        f'<img class="product-image" src="{img1}"/>'
+        f'<img class="product-image" src="{img2}"/>'
+        f'<img class="duplicate" src="{img1}"/>'
+        '</body></html>'
+    )
+    info = parse_track_page(page, TODAY)
+    assert info.item_image_url == img1
+    assert info.item_image_urls == [img1, img2]
+
+    # Test build_record with multiple tiles and multiple images
+    tiles = [
+        OrderTile("001", "L1", "S1", "1", "/pop1", "First Item", "Shipped", None, TODAY, None),
+        OrderTile("001", "L2", "S1", "1", "/pop2", "Second Item", "Shipped", None, TODAY, None),
+    ]
+    record = build_record(COUNTRY, tiles, "/track", info)
+    assert record["image_url"] == img1
+    assert record["image_urls"] == [img1, img2]
+    assert record["order_items"] == [
+        {"title": "First Item", "image_url": img1},
+        {"title": "Second Item", "image_url": img2},
+    ]
 
 
 def test_tracking_id_tolerates_the_dutch_label():
