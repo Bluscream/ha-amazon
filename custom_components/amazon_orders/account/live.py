@@ -4,7 +4,7 @@ Pure: no I/O, no Home Assistant objects. While Amazon's own fleet delivers a
 parcel, its tracking page polls a location endpoint for the courier's recent
 positions and a map state (the courier's status and Amazon's own callout,
 "4 stops away"). This module turns one such answer into the suite's
-``parcel-live/1`` shape (see the fork's LIVE_TRACKING.md): a ``live`` dict
+``parcel-live/1`` shape (see the fork's PARCEL_EXTENSIONS.md): a ``live`` dict
 beside the canonical parcel keys. The destination Amazon also knows is
 deliberately never read: the home location is the dashboard's to know.
 """
