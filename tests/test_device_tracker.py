@@ -42,16 +42,35 @@ async def test_device_tracker_properties(hass):
     assert courier.source_type == SourceType.GPS
     assert courier.latitude == 52.37
     assert courier.longitude == 4.9
-    assert courier.location_accuracy == 0.0
+    assert courier.location_accuracy == 10.0
     assert courier.extra_state_attributes["stops_away"] == 3
     assert courier.extra_state_attributes["barcode"] == "TBA123"
     assert courier.extra_state_attributes["live_state"] == "en_route"
+    assert "distance_km" in courier.extra_state_attributes
+    assert courier.device_info["identifiers"] == {(DOMAIN, entry.entry_id)}
 
-    # Update with changed location
+    # Attach coordinator parcel with image and title
+    coordinator = MagicMock()
+    coordinator.parcels = [
+        {
+            "barcode": "TBA123",
+            "raw": {
+                "image_url": "https://m.media-amazon.com/item.jpg",
+                "items": ["Sample Product Title"],
+            },
+        }
+    ]
+    entry.runtime_data = MagicMock(coordinator=coordinator)
+    assert courier.entity_picture == "https://m.media-amazon.com/item.jpg"
+    assert courier.extra_state_attributes["title"] == "Sample Product Title"
+
+    # Update with changed location and accuracy missing (fallback to 0.0)
     new_live = _live_dict(lat=52.365, lon=4.895, stops=1)
+    del new_live["accuracy"]
     courier.async_update_live(new_live)
     assert courier.latitude == 52.365
     assert courier.longitude == 4.895
+    assert courier.location_accuracy == 0.0
     assert courier.extra_state_attributes["stops_away"] == 1
 
 

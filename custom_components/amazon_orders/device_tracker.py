@@ -13,10 +13,11 @@ from homeassistant.components.device_tracker import SourceType, TrackerEntity
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util.location import distance
 
 from . import AmazonConfigEntry
 from .const import live_signal
-from .device import ATTRIBUTION
+from .device import ATTRIBUTION, build_device_info
 
 PARALLEL_UPDATES = 0
 
@@ -73,6 +74,17 @@ class AmazonCourierTracker(TrackerEntity):
         self._live = live
         self._attr_unique_id = f"{entry.entry_id}_courier_{barcode}"
         self._attr_name = f"Amazon courier {barcode}"
+        self._attr_device_info = build_device_info(entry)
+
+    def _get_parcel(self) -> dict[str, Any] | None:
+        """Find the matching parcel dict from the coordinator."""
+        if hasattr(self._entry, "runtime_data") and self._entry.runtime_data:
+            coordinator = getattr(self._entry.runtime_data, "coordinator", None)
+            if coordinator and getattr(coordinator, "parcels", None):
+                for p in coordinator.parcels:
+                    if p.get("barcode") == self._barcode:
+                        return p
+        return None
 
     @callback
     def async_update_live(self, live: dict[str, Any]) -> None:
@@ -96,14 +108,66 @@ class AmazonCourierTracker(TrackerEntity):
     @property
     def location_accuracy(self) -> float:
         """Accuracy of GPS position in metres."""
+        acc = self._live.get("accuracy")
+        if isinstance(acc, (int, float)) and not isinstance(acc, bool):
+            return float(acc)
         return 0.0
+
+    @property
+    def entity_picture(self) -> str | None:
+        """Return courier vehicle icon or item image for map pin."""
+        parcel = self._get_parcel()
+        if not parcel:
+            return None
+        raw = parcel.get("raw") or {}
+        if raw.get("image_url"):
+            return raw.get("image_url")
+        order_items = raw.get("order_items")
+        if order_items and isinstance(order_items, list) and order_items[0].get("image_url"):
+            return order_items[0].get("image_url")
+        items = raw.get("items")
+        if items and isinstance(items, list) and isinstance(items[0], dict) and items[0].get("image_url"):
+            return items[0].get("image_url")
+        return None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Extra state attributes for courier delivery status."""
-        return {
+        attrs: dict[str, Any] = {
             "barcode": self._barcode,
             "stops_away": self._live.get("stops_away"),
             "live_state": self._live.get("state"),
             "position_at": self._live.get("position_at"),
         }
+        if (
+            self.latitude is not None
+            and self.longitude is not None
+            and self.hass is not None
+            and getattr(self.hass.config, "latitude", None) is not None
+            and getattr(self.hass.config, "longitude", None) is not None
+        ):
+            metres = distance(
+                self.hass.config.latitude,
+                self.hass.config.longitude,
+                self.latitude,
+                self.longitude,
+            )
+            if metres is not None:
+                attrs["distance_km"] = round(metres / 1000, 2)
+
+        parcel = self._get_parcel()
+        if parcel:
+            raw = parcel.get("raw") or {}
+            items = raw.get("items")
+            if items and isinstance(items, list):
+                if isinstance(items[0], str):
+                    attrs["items"] = items
+                    attrs["title"] = items[0]
+                elif isinstance(items[0], dict):
+                    attrs["items"] = items
+                    attrs["title"] = items[0].get("title")
+            elif raw.get("order_items"):
+                attrs["items"] = raw["order_items"]
+                attrs["title"] = raw["order_items"][0].get("title")
+
+        return attrs
