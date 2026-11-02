@@ -72,6 +72,31 @@ def test_parcel_sensor_status_and_attributes():
     }
 
 
+def test_parcel_sensor_single_item_truncation():
+    # 80 chars - should not be truncated because single item limit is 128
+    title_80 = "Veet Expert Hair Removal Cream Sensitive Skin with Shea Butter & Tested Formula"
+    parcel = _parcel(
+        "A",
+        raw={"items": [title_80]},
+    )
+    sensor = AmazonParcelSensor(_coordinator([parcel]), _entry(), "A")
+    assert sensor.translation_placeholders == {
+        "barcode": f'A ("{title_80}")'
+    }
+
+    # 140 chars - should be truncated to 128 chars + ellipsis
+    long_title = "A" * 140
+    parcel_long = _parcel(
+        "B",
+        raw={"items": [long_title]},
+    )
+    sensor_long = AmazonParcelSensor(_coordinator([parcel_long]), _entry(), "B")
+    expected_title = ("A" * 128) + "…"
+    assert sensor_long.translation_placeholders == {
+        "barcode": f'B ("{expected_title}")'
+    }
+
+
 def test_parcel_sensor_missing_barcode():
     sensor = AmazonParcelSensor(_coordinator([_parcel("A")]), _entry(), "OTHER")
     assert sensor.native_value is None

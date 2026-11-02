@@ -183,11 +183,12 @@ class AmazonParcelSensor(CoordinatorEntity[AmazonCoordinator], SensorEntity):
         parcel = self._get_parcel()
         items = (parcel.get("raw") or {}).get("items") if parcel else None
         if items and isinstance(items, list):
+            max_len = 128 if len(items) == 1 else 32
             shortened = []
             for item in items:
                 clean = str(item).strip()
-                if len(clean) > 32:
-                    clean = clean[:32].rstrip() + "…"
+                if len(clean) > max_len:
+                    clean = clean[:max_len].rstrip() + "…"
                 shortened.append(f'"{clean}"')
             new_placeholders = {
                 "barcode": f"{self._barcode} ({', '.join(shortened)})"
