@@ -8,7 +8,6 @@ import pytest
 
 from custom_components.amazon_orders.account.pages import (
     _day_month,
-    arrival_days,
     build_record,
     business_card_count,
     business_cards_found,
@@ -1081,27 +1080,28 @@ def test_business_list_count_and_error_flag():
 # whole-day window from an "Arriving ..." order line
 # ---------------------------------------------------------------------------
 
-ARRIVAL_TODAY = date(2026, 10, 25)
+def test_a_timed_arriving_line_gives_that_window():
+    zone = ZoneInfo("Europe/Berlin")
+    read_at = datetime(2026, 11, 2, 11, 0, tzinfo=zone)
+    tiles = parse_order_tiles(
+        orders_page(tile(ACTIVE_SHIPMENT, "Arriving today 6 pm – 10 pm", None)),
+        TODAY,
+    )
+    record = build_record("amazon.de", tiles, None, None, read_at=read_at)
+    assert record["delivery_window"] == [
+        "2026-11-02T18:00:00+01:00",
+        "2026-11-02T22:00:00+01:00",
+    ]
 
 
-@pytest.mark.parametrize(
-    "text,expected",
-    [
-        ("Arriving tomorrow", (date(2026, 10, 26), date(2026, 10, 26))),
-        ("Arriving today", (ARRIVAL_TODAY, ARRIVAL_TODAY)),
-        ("Arriving Oct 27", (date(2026, 10, 27), date(2026, 10, 27))),
-        ("Arriving Oct 27-29", (date(2026, 10, 27), date(2026, 10, 29))),
-        ("Arriving Oct 30-Nov 2", (date(2026, 10, 30), date(2026, 11, 2))),
-        ("Arriving Jan 3", (date(2027, 1, 3), date(2027, 1, 3))),
-        ("Arriving today 11:00 AM - 1:15 PM", None),
-        ("Arriving Foo 3", None),
-        ("Arriving Feb 31", None),
-        ("Morgen", None),
-        (None, None),
-    ],
-)
-def test_arrival_days(text, expected):
-    assert arrival_days(text, ARRIVAL_TODAY) == expected
+def test_an_unreadable_arriving_line_warns_once(caplog):
+    read_at = datetime(2026, 11, 2, 11, 0, tzinfo=ZoneInfo("Europe/Berlin"))
+    tiles = parse_order_tiles(
+        orders_page(tile(ACTIVE_SHIPMENT, "Arriving sometime soon", None)), TODAY
+    )
+    record = build_record("amazon.de", tiles, None, None, read_at=read_at)
+    assert record["delivery_window"] is None
+    assert "a shape we could not read" in caplog.text
 
 
 def test_an_arriving_line_gives_a_whole_day_window():

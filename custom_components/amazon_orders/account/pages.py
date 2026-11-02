@@ -18,6 +18,7 @@ from urllib.parse import parse_qs, urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ..const import ParcelStatus
+from .arrival import parse_arrival
 from .parcels import warn_once
 from .vocabulary import (
     MONTHS,
@@ -528,57 +529,34 @@ def _relative_day(text: str, today: date) -> date | None:
     return None
 
 
-# "Arriving tomorrow", "Arriving Oct 27", "Arriving Oct 27-29", "Arriving Oct 27-Nov 2":
-# the English forms seen on a real storefront; a timed "Arriving today 11:00 AM - ..."
-# is the delivery window's business and does not match.
-_ARRIVING_RE = re.compile(
-    r"arriving\s+(?:(?P<word>today|tomorrow)|(?P<m1>[a-z]+)\s+(?P<d1>\d{1,2})"
-    r"(?:\s*-\s*(?:(?P<m2>[a-z]+)\s+)?(?P<d2>\d{1,2}))?)",
-    re.IGNORECASE,
-)
-
-
-def arrival_days(text: str | None, today: date) -> tuple[date, date] | None:
-    """Return the first and last day an order line says the shipment arrives."""
-    match = _ARRIVING_RE.fullmatch((text or "").strip())
-    if not match:
-        return None
-    if match["word"]:
-        day = today + timedelta(days=match["word"].lower() == "tomorrow")
-        return day, day
-    month = MONTHS.get(match["m1"].lower())
-    end_month = MONTHS.get((match["m2"] or match["m1"]).lower())
-    if month is None or end_month is None:
-        return None
-    try:
-        first = date(today.year, month, int(match["d1"]))
-        if first < today - timedelta(days=1):
-            first = first.replace(year=today.year + 1)
-        last = date(first.year, end_month, int(match["d2"] or match["d1"]))
-        if last < first:
-            last = last.replace(year=last.year + 1)
-    except ValueError:
-        return None
-    return first, last
-
-
 def _arrival_window(
     text: str | None, track: TrackInfo | None, read_at: datetime | None
 ) -> tuple[str, str] | None:
-    """Return the whole-day window an order line names, in the page's time zone."""
+    """Return the window an order line names, in the page's time zone.
+
+    A line with a time range gives that range; one naming only days gives
+    those whole days.
+    """
     zone = (_zone(track.timezone) if track else None) or (
         read_at.tzinfo if read_at else None
     )
     if read_at is None or zone is None:
         return None
-    days = arrival_days(text, read_at.astimezone(zone).date())
-    if days is None:
+    arrival = parse_arrival(text, read_at.astimezone(zone).date())
+    if arrival is None:
+        if text and text.strip().lower().startswith("arriving"):
+            masked = _mask(text)
+            warn_once(
+                f"arrival-text={masked}",
+                f'Amazon promised the delivery as "{masked}", a shape we could not'
+                " read, so the parcel has no delivery date; please share it.",
+            )
         return None
+    start = arrival.start or time.min
+    end = arrival.end or time.max.replace(microsecond=0)
     return (
-        datetime.combine(days[0], time.min, tzinfo=zone).isoformat(),
-        datetime.combine(
-            days[1], time.max.replace(microsecond=0), tzinfo=zone
-        ).isoformat(),
+        datetime.combine(arrival.first, start, tzinfo=zone).isoformat(),
+        datetime.combine(arrival.last, end, tzinfo=zone).isoformat(),
     )
 
 
