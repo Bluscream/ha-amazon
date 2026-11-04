@@ -209,11 +209,11 @@ SERVICE_TRACK_PARCEL = "track_parcel"
 # Live courier tracking (parcel-live/1, see the fork's PARCEL_EXTENSIONS.md).
 # On by default: it only ever reads parcels Amazon's own fleet has out for
 # delivery, and only while the tracking page offers the courier map. The
-# tracking page itself asks every 30 s; a minute is plenty for a dashboard and
-# half the load.
+# tracking page itself asks every 30 s with a 10 s retry on network errors.
 CONF_LIVE_TRACKING = "live_tracking"
 DEFAULT_LIVE_TRACKING = True
-LIVE_INTERVAL_SECONDS = 60
+LIVE_INTERVAL_SECONDS = 30
+LIVE_ERROR_RETRY_SECONDS = 10
 # Out for delivery but no courier shown yet: Amazon opens the map only for the
 # last stops, so ask less often until it does.
 LIVE_PROBE_SECONDS = 300
