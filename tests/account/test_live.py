@@ -249,6 +249,37 @@ def test_the_response_code_of_a_refusal():
     assert response_code(None) is None
 
 
+def test_deans_proxy_payload():
+    payload = {
+        "success": True,
+        "responseCode": "SUCCESS",
+        "packageLocationDetails": {
+            "trackingObjectId": "DE6015183235",
+            "trackingObjectState": "PICKED_UP",
+            "stopsRemaining": "5",
+            "transporterDetails": {
+                "transporterSessionState": "ACTIVE",
+                "geoLocation": {
+                    "latitude": 50.0184,
+                    "longitude": 8.2220,
+                    "accuracy": 4.5,
+                    "locationTime": 1793810987,
+                },
+            },
+        },
+    }
+    reading = parse_location_state(payload)
+    assert reading is not None
+    assert reading.state == LiveState.EN_ROUTE
+    assert reading.stops_away == 5
+    assert reading.latitude == 50.0184
+    assert reading.longitude == 8.2220
+    assert reading.accuracy == 4.5
+    assert reading.raw_state == "PICKED_UP"
+    assert len(reading.trail) == 1
+
+
+
 def test_an_answer_without_a_timeline_still_reads_its_state():
     payload = location_state(callout="3 stops away")
     del payload["value"]["packageLocationTimeline"]

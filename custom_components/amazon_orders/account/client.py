@@ -35,6 +35,7 @@ from ..const import (
 from .auth import exchange_token_for_cookies, refresh_access_token
 from .errors import AmazonApiError, AmazonAuthError
 from .live import (
+    LIVE_PROXY_PATH,
     LIVE_STATE_PATH,
     STALE_TOKEN_CODES,
     LiveReading,
@@ -498,19 +499,43 @@ class AmazonClient:
             "Origin": origin,
             "Referer": f"{origin}{target.track_path}",
         }
-        async with self._session.post(
-            f"{origin}{LIVE_STATE_PATH}",
-            data=request_form(target, polls),
-            headers=headers,
-        ) as response:
-            if response.status in (401, 403):
-                return None
-            if response.status != 200:
-                raise AmazonApiError(
-                    f"HTTP {response.status}", status_code=response.status
-                )
+
+        # Try LIVE_STATE_PATH first (or LIVE_PROXY_PATH if legacy is rejected)
+        for path in (LIVE_STATE_PATH, LIVE_PROXY_PATH):
+            data = request_form(target, polls) if path == LIVE_STATE_PATH else {
+                "trackingId": target.tracking_id,
+                "csrfToken": target.csrf_token,
+            }
             try:
-                return await response.json(content_type=None)
-            except ValueError:
-                # A sign-in page instead of JSON: treat like a refused session.
-                return None
+                async with self._session.post(
+                    f"{origin}{path}",
+                    data=data,
+                    headers=headers,
+                ) as response:
+                    if response.status in (401, 403):
+                        return None
+                    if response.status != 200:
+                        raise AmazonApiError(
+                            f"HTTP {response.status}", status_code=response.status
+                        )
+                    try:
+                        payload = await response.json(content_type=None)
+                    except ValueError:
+                        # A sign-in page instead of JSON: treat like a refused session.
+                        return None
+                    if isinstance(payload, dict):
+                        if payload.get("success") is True:
+                            return payload
+                        # Stale tokens or refusal
+                        if payload.get("responseCode") in STALE_TOKEN_CODES:
+                            return payload
+                        # UNSUCCESSFUL_REQUEST on get-state means endpoint deprecated; try proxy
+                        if path == LIVE_STATE_PATH and payload.get("responseCode") == "UNSUCCESSFUL_REQUEST":
+                            continue
+                        return payload
+            except AmazonApiError:
+                raise
+            except (aiohttp.ClientError, TimeoutError):
+                continue
+
+        return None

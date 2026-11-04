@@ -22,6 +22,7 @@ from typing import Any
 from .parcels import warn_once
 
 LIVE_STATE_PATH = "/progress-tracker/package/actions/package-location/get-state"
+LIVE_PROXY_PATH = "/progress-tracker/package/actions/map-tracking-deans-proxy"
 TRAIL_MAX_POINTS = 30
 
 # The token the tracking page hands its own scripts; the location endpoint
@@ -233,6 +234,62 @@ def parse_location_state(payload: object) -> LiveReading | None:
     """
     if not isinstance(payload, dict) or payload.get("success") is not True:
         return None
+
+    # Format 1: map-tracking-deans-proxy (packageLocationDetails)
+    if "packageLocationDetails" in payload:
+        details = payload.get("packageLocationDetails")
+        if not isinstance(details, dict):
+            return None
+        transporter = details.get("transporterDetails") or {}
+        geo = (transporter.get("geoLocation") if isinstance(transporter, dict) else None) or {}
+        lat = _coordinate(geo.get("latitude"), 90)
+        lon = _coordinate(geo.get("longitude"), 180)
+        accuracy = geo.get("accuracy")
+        accuracy_val = (
+            float(accuracy)
+            if isinstance(accuracy, int | float)
+            and not isinstance(accuracy, bool)
+            and math.isfinite(accuracy)
+            and accuracy >= 0
+            else None
+        )
+        time_sec = geo.get("locationTime")
+        pos_at = None
+        if isinstance(time_sec, int | float) and not isinstance(time_sec, bool):
+            try:
+                pos_at = datetime.fromtimestamp(time_sec, tz=timezone.utc).isoformat()
+            except (OverflowError, OSError, ValueError):
+                pass
+
+        raw_state = details.get("trackingObjectState")
+        raw_state = str(raw_state) if raw_state else None
+        state = _state(raw_state)
+        stops_raw = details.get("stopsRemaining")
+        stops = None
+        if isinstance(stops_raw, int) and not isinstance(stops_raw, bool) and stops_raw >= 0:
+            stops = stops_raw
+        elif isinstance(stops_raw, str) and stops_raw.isdigit():
+            stops = int(stops_raw)
+        elif state is LiveState.NEXT_STOP:
+            stops = 0
+
+        trail = [
+            {"latitude": lat, "longitude": lon, "timestamp": pos_at}
+        ] if lat is not None and lon is not None else []
+
+        return LiveReading(
+            state=state,
+            stops_away=stops,
+            latitude=lat,
+            longitude=lon,
+            accuracy=accuracy_val,
+            position_at=pos_at,
+            message=f"{stops} stops away" if stops is not None else None,
+            raw_state=raw_state,
+            trail=trail,
+        )
+
+    # Format 2: package-location/get-state (legacy)
     value = payload.get("value")
     if not isinstance(value, dict):
         return None
