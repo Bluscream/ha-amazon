@@ -846,11 +846,17 @@ def test_delivery_window_from_the_promise_and_its_countdown():
     )
 
 
-def test_delivery_window_with_twelve_hour_times():
-    state = {
-        **FR_STATE,
-        "promise": {"promiseMessage": "Arriving today 2:00 PM - 4:30 PM"},
-    }
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Arriving today 2:00 PM - 4:30 PM",
+        # amazon.de in English, seen 2026-11-04 (half hours keep the minutes).
+        "Now arriving today 2 pm - 4:30 pm",
+        "Now arriving today 2pm – 4:30pm",
+    ],
+)
+def test_delivery_window_with_twelve_hour_times(message):
+    state = {**FR_STATE, "promise": {"promiseMessage": message}}
     assert delivery_window(state, READ_AT) == (
         "2026-10-24T14:00:00+02:00",
         "2026-10-24T16:30:00+02:00",
@@ -1209,7 +1215,10 @@ def test_tile_asin_extraction():
     # From path (desktop and mobile)
     assert _tile_asin("/dp/B0BX76TDK2", "") == "B0BX76TDK2"
     assert _tile_asin("/gp/product/B0BX76TDK2", "") == "B0BX76TDK2"
-    assert _tile_asin("/-/en/gp/aw/d/B004URLZMG?ref=ppx_pt2_mob_b_prod_image", "") == "B004URLZMG"
+    assert (
+        _tile_asin("/-/en/gp/aw/d/B004URLZMG?ref=ppx_pt2_mob_b_prod_image", "")
+        == "B004URLZMG"
+    )
     assert _tile_asin("/gp/aw/d/B004URLZMG", "") == "B004URLZMG"
     # From markup fragment
     assert (
@@ -1270,11 +1279,11 @@ def test_track_page_carousel_item_extraction():
         '<li aria-roledescription="slide" class="a-carousel-card">'
         '<a class="a-link-normal image-wrapper" href="/-/en/gp/aw/d/B004URLZMG?ref=test">'
         '<img alt="Gogo Hotpants with chain" data-src="https://m.media-amazon.com/images/I/gogo.jpg" src="grey.gif"/>'
-        '</a>'
-        '</li>'
-        '</ol>'
-        '</div>'
-        '</section>'
+        "</a>"
+        "</li>"
+        "</ol>"
+        "</div>"
+        "</section>"
     )
     track = parse_track_page(f"<html><body>{carousel_html}</body></html>", TODAY)
     assert len(track.items) == 1
@@ -1300,10 +1309,10 @@ def test_build_record_active_order_uses_track_carousel_asins():
         '<li class="a-carousel-card">'
         '<a href="/-/en/gp/aw/d/B004URLZMG?ref=test">'
         '<img alt="Gogo Hotpants with chain leather look 8-12" data-src="https://m.media-amazon.com/images/I/hires.jpg"/>'
-        '</a>'
-        '</li>'
-        '</ol>'
-        '</div></section>'
+        "</a>"
+        "</li>"
+        "</ol>"
+        "</div></section>"
     )
     track = parse_track_page(f"<html><body>{carousel_html}</body></html>", TODAY)
 

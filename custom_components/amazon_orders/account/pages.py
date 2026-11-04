@@ -87,10 +87,10 @@ _TILE_IMAGE_RE = re.compile(r'class="product-image[^"]*">\s*(<img\b[^>]*>)', re.
 _IMAGE_SRC_RE = re.compile(r'\b(data-a-hires|src)="(https://[^"]+)"')
 _TILE_SPAN = 4000  # characters; a real order line is about half that
 
-# "14:00 - 16:30" in the promise message, with the countdown to its end.
-_WINDOW_RE = re.compile(
-    r"(\d{1,2}:\d{2}(?:\s*[AaPp][Mm])?)\s*[-–]\s*(\d{1,2}:\d{2}(?:\s*[AaPp][Mm])?)"
-)
+# "14:00 - 16:30", "2:00 PM - 4:30 PM" or "3 pm - 6 pm" (amazon.de in English)
+# in the promise message, with the countdown to its end.
+_WINDOW_TIME = r"\d{1,2}(?::\d{2})?\s*[AaPp][Mm]|\d{1,2}:\d{2}"
+_WINDOW_RE = re.compile(rf"({_WINDOW_TIME})\s*[-–]\s*({_WINDOW_TIME})")
 _WINDOW_END_KEY = "timeUntilPredictedDeliveryWindowEnd"
 _WINDOW_TOLERANCE = timedelta(hours=1)
 # A courier the page does not name: the Colissimo id shape, amazon.fr only.
@@ -671,9 +671,10 @@ def _arrival_window(
 
 
 def _parse_time(text: str) -> time | None:
-    for shape in ("%I:%M %p", "%H:%M"):
+    normalized = re.sub(r"\s*([AP]M)$", r" \1", text.strip().upper())
+    for shape in ("%I:%M %p", "%I %p", "%H:%M"):
         try:
-            return datetime.strptime(text.strip().upper(), shape).time()
+            return datetime.strptime(normalized, shape).time()
         except ValueError:
             continue
     return None
