@@ -177,6 +177,7 @@ class AmazonCoordinator(DataUpdateCoordinator[list[dict]]):
         # that already existed when the integration started — otherwise every
         # restart would flood users with "registered" notifications.
         self._known_state: dict[str, ParcelStatus] | None = None
+        self._known_raw_statuses: dict[str, str | None] | None = None
         self._known_delivery_times: dict[str, tuple[str | None, str | None]] | None = (
             None
         )
@@ -318,6 +319,11 @@ class AmazonCoordinator(DataUpdateCoordinator[list[dict]]):
             for parcel in incoming
             if parcel.get("barcode")
         }
+        self._known_raw_statuses = {
+            parcel["barcode"]: parcel.get("raw_status")
+            for parcel in incoming
+            if parcel.get("barcode")
+        }
         self._known_delivery_times = {
             parcel["barcode"]: (parcel.get("planned_from"), parcel.get("planned_to"))
             for parcel in incoming
@@ -393,6 +399,7 @@ class AmazonCoordinator(DataUpdateCoordinator[list[dict]]):
             return
 
         known_times = self._known_delivery_times or {}
+        known_raws = self._known_raw_statuses or {}
         device_id = self._device_id()
 
         for parcel in parcels:
@@ -408,13 +415,20 @@ class AmazonCoordinator(DataUpdateCoordinator[list[dict]]):
                     )
                 continue
 
-            if self._known_state[barcode] != new_status:
-                if new_status == ParcelStatus.DELIVERED:
+            raw_status = parcel.get("raw_status")
+            old_raw = known_raws.get(barcode)
+            status_changed = self._known_state[barcode] != new_status
+            raw_changed = (
+                raw_status is not None and old_raw is not None and raw_status != old_raw
+            )
+
+            if status_changed or raw_changed:
+                if new_status == ParcelStatus.DELIVERED and status_changed:
                     self.hass.bus.async_fire(
                         f"{DOMAIN}_parcel_delivered",
                         {**parcel, "device_id": device_id},
                     )
-                else:
+                elif new_status != ParcelStatus.DELIVERED:
                     self.hass.bus.async_fire(
                         f"{DOMAIN}_parcel_status_changed",
                         {
@@ -422,6 +436,7 @@ class AmazonCoordinator(DataUpdateCoordinator[list[dict]]):
                             "device_id": device_id,
                             "old_status": self._known_state[barcode],
                             "new_status": new_status,
+                            "old_raw_status": old_raw,
                         },
                     )
 
